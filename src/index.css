@@ -1,0 +1,203 @@
+/* COPYRIGHT ALEN PEPA */
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-cyber-green: #00ff41;
+  --color-cyber-bg: #0a0a0a;
+  --color-cyber-card: #141414;
+  --color-cyber-border: #2a2a2a;
+
+  @keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+    100% { transform: translate(0); }
+  }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  --animate-spin-slow: spin-slow 8s linear infinite;
+}
+
+/* Permanent Copyright Protection */
+[data-copyright="alen-pepa"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 0.4 !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  z-index: 9999 !important;
+}
+
+.glitch-text {
+  position: relative;
+  display: inline-block;
+  color: #ff4d4d;
+  animation: glitch 2s cubic-bezier(.25,.46,.45,.94) both infinite;
+  text-shadow: 0.05em 0 0 rgba(255,0,0,.3),
+              -0.025em -0.05em 0 rgba(150,0,0,.3),
+              0 0 5px rgba(255,0,0,0.2);
+}
+
+.glitch-text:hover {
+  animation: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both infinite;
+  text-shadow: 0.05em 0 0 rgba(255,0,0,.9),
+              -0.025em -0.05em 0 rgba(150,0,0,.9),
+              0.025em 0.05em 0 rgba(255,80,80,.9),
+              0 0 10px rgba(255,0,0,0.5);
+}
+
+:root.matrix {
+  --color-cyber-green: #00ff41;
+  --color-cyber-bg: #000500;
+  --color-cyber-card: #001100;
+  --color-cyber-border: #003b00;
+}
+
+:root.cobalt {
+  --color-cyber-green: #00d4ff;
+  --color-cyber-bg: #000814;
+  --color-cyber-card: #001d3d;
+  --color-cyber-border: #003566;
+}
+
+:root.crimson {
+  --color-cyber-green: #ff4d4d;
+  --color-cyber-bg: #1a0000;
+  --color-cyber-card: #2d0000;
+  --color-cyber-border: #4d0000;
+}
+
+@layer base {
+  body {
+    @apply bg-cyber-bg text-gray-300 font-sans antialiased cursor-none;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-white font-mono tracking-tight;
+  }
+
+  /* Custom Scrollbar - CyberSuite Edition */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #050505;
+    border-left: 1px solid #1a1a1a;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #222;
+    border-color: var(--color-cyber-green);
+    box-shadow: inset 0 0 5px rgba(0, 255, 65, 0.2);
+  }
+
+  ::-webkit-scrollbar-button:single-button {
+    background-color: #0a0a0a;
+    display: block;
+    background-size: 6px;
+    background-repeat: no-repeat;
+    border: 1px solid #1a1a1a;
+  }
+
+  ::-webkit-scrollbar-button:single-button:vertical:decrement {
+    height: 12px;
+    width: 10px;
+    background-position: center center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%2300ff41'><polygon points='5,2 1,8 9,8'/></svg>");
+  }
+
+  ::-webkit-scrollbar-button:single-button:vertical:increment {
+    height: 12px;
+    width: 10px;
+    background-position: center center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%2300ff41'><polygon points='1,2 9,2 5,8'/></svg>");
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: #050505;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 65, 0.5);
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.scanline {
+  width: 100%;
+  height: 100px;
+  z-index: 10;
+  background: linear-gradient(0deg, rgba(0, 255, 65, 0) 0%, rgba(0, 255, 65, 0.02) 50%, rgba(0, 255, 65, 0) 100%);
+  opacity: 0.1;
+  position: absolute;
+  bottom: 100%;
+  animation: scanline 10s linear infinite;
+}
+
+@keyframes scanline {
+  0% { bottom: 100%; }
+  100% { bottom: -100px; }
+}
+
+.cyber-card {
+  @apply bg-[#0d0d0d] border border-white/5 relative overflow-hidden transition-all duration-300;
+  background-image: radial-gradient(circle at 50% 0%, rgba(0, 255, 65, 0.03) 0%, transparent 70%);
+}
+
+.cyber-card:hover {
+  @apply border-cyber-green/20 shadow-[0_0_20px_rgba(0,255,65,0.05)];
+}
+
+.corner-accent {
+  @apply absolute w-2 h-2 border-cyber-green/30 pointer-events-none;
+}
+
+.corner-tl { @apply top-0 left-0 border-t border-l; }
+.corner-tr { @apply top-0 right-0 border-t border-r; }
+.corner-bl { @apply bottom-0 left-0 border-b border-l; }
+.corner-br { @apply bottom-0 right-0 border-b border-r; }
+
+.cyber-button {
+  @apply relative px-4 py-2 bg-black/40 border border-white/10 text-[10px] font-mono text-gray-400 uppercase tracking-widest transition-all hover:bg-cyber-green/10 hover:border-cyber-green/30 hover:text-white;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
