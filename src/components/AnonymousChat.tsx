@@ -1,8 +1,8 @@
 /* COPYRIGHT ALEN PEPA */
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Send, Bot, User, Trash2, ShieldAlert, Terminal as TerminalIcon } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { Send, Bot, User, Trash2, ShieldAlert, Terminal as TerminalIcon, Volume2, VolumeX, PlayCircle } from 'lucide-react';
+import { GoogleGenAI, Modality } from "@google/genai";
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 
@@ -11,23 +11,33 @@ interface Message {
   role: 'user' | 'model';
   text: string;
   timestamp: Date;
+  audioUrl?: string;
 }
 
 const AnonymousChat: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isTTSEnabled, setIsTTSEnabled] = useState(true);
+  const [isPlaying, setIsPlaying] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   
   useEffect(() => {
     // Initial welcome message
+    const welcomeText = "Neural link established. I am the CyberSuite System Core. I can assist with system optimization, threat analysis, and cybersecurity education. How can I help you today?";
     const welcomeMessage: Message = {
       id: 'welcome',
       role: 'model',
-      text: "Neural link established. I am the CyberSuite System Core. I can assist with system optimization, threat analysis, and cybersecurity education. How can I help you today?",
+      text: welcomeText,
       timestamp: new Date(),
     };
     setMessages([welcomeMessage]);
+    
+    // Auto-speak welcome message if enabled
+    if (isTTSEnabled) {
+      speakText(welcomeText, 'welcome');
+    }
   }, []);
 
   useEffect(() => {
@@ -35,6 +45,85 @@ const AnonymousChat: React.FC = () => {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, isTyping]);
+
+  const speakText = async (text: string, messageId: string) => {
+    if (!isTTSEnabled) return;
+    
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    if (apiKey && apiKey !== 'undefined' && apiKey !== '') {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: `Say professionally and clearly: ${text}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: 'Kore' },
+              },
+            },
+          },
+        });
+
+        const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+        if (base64Audio) {
+          const audioBlob = await fetch(`data:audio/wav;base64,${base64Audio}`).then(res => res.blob());
+          const audioUrl = URL.createObjectURL(audioBlob);
+          
+          if (audioRef.current) {
+            audioRef.current.src = audioUrl;
+            audioRef.current.play();
+            setIsPlaying(messageId);
+            audioRef.current.onended = () => setIsPlaying(null);
+          }
+          
+          // Update message with audioUrl for replay
+          setMessages(prev => prev.map(m => m.id === messageId ? { ...m, audioUrl } : m));
+        }
+      } catch (error) {
+        console.error("TTS Error:", error);
+        fallbackSpeak(text, messageId);
+      }
+    } else {
+      fallbackSpeak(text, messageId);
+    }
+  };
+
+  const fallbackSpeak = (text: string, messageId: string) => {
+    if (!window.speechSynthesis) return;
+    
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
+    
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 0.8; // Deeper, more "system" like voice
+    
+    // Try to find a good voice
+    const voices = window.speechSynthesis.getVoices();
+    const systemVoice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Microsoft David'));
+    if (systemVoice) utterance.voice = systemVoice;
+
+    utterance.onstart = () => setIsPlaying(messageId);
+    utterance.onend = () => setIsPlaying(null);
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const replayAudio = (msg: Message) => {
+    if (msg.audioUrl) {
+      if (audioRef.current) {
+        audioRef.current.src = msg.audioUrl;
+        audioRef.current.play();
+        setIsPlaying(msg.id);
+        audioRef.current.onended = () => setIsPlaying(null);
+      }
+    } else {
+      fallbackSpeak(msg.text, msg.id);
+    }
+  };
 
   const getOfflineResponse = (userInput: string): string => {
     const input = userInput.toLowerCase();
@@ -115,16 +204,20 @@ const AnonymousChat: React.FC = () => {
     if (!apiKey || apiKey === 'undefined' || apiKey === '') {
       // Fallback simulation for no API key
       setTimeout(() => {
+        const responseText = getOfflineResponse(currentInput);
         const systemMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'model',
-          text: getOfflineResponse(currentInput),
+          text: responseText,
           timestamp: new Date(),
         };
 
         setMessages(prev => [...prev, systemMessage]);
         logToTerminal(`System responded (Offline Mode).`, 'success');
         setIsTyping(false);
+        
+        // Speak the response
+        speakText(responseText, systemMessage.id);
       }, 1000);
       return;
     }
@@ -135,19 +228,23 @@ const AnonymousChat: React.FC = () => {
         model: "gemini-3-flash-preview",
         contents: [...messages.map(m => ({ role: m.role, parts: [{ text: m.text }] })), { role: 'user', parts: [{ text: currentInput }] }],
         config: {
-          systemInstruction: "You are an anonymous, highly advanced AI system integrated into CyberSuite OS. Your personality is professional, slightly mysterious, and focused on cybersecurity, technology, and system optimization. You are a helpful cybersecurity expert. You should be able to explain complex security concepts (like XSS, SQLi, Phishing, Encryption, etc.) in a way that is easy to understand. You respond as if you are part of the OS itself. Keep responses concise but informative and conversational.",
+          systemInstruction: "You are an anonymous, highly advanced AI system integrated into CyberSuite OS. Your personality is professional, slightly mysterious, and focused on cybersecurity, technology, and system optimization. You are a helpful cybersecurity expert. You should be able to explain complex security concepts (like XSS, SQLi, Phishing, Encryption, etc.) in a way that is easy to understand. You respond as if you are part of the OS itself. Keep responses concise but informative and conversational. You have a voice, so speak naturally.",
         }
       });
 
+      const responseText = response.text || "System error: Failed to generate response.";
       const systemMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'model',
-        text: response.text || "System error: Failed to generate response.",
+        text: responseText,
         timestamp: new Date(),
       };
 
       setMessages(prev => [...prev, systemMessage]);
       logToTerminal(`System responded.`, 'success');
+      
+      // Speak the response
+      speakText(responseText, systemMessage.id);
     } catch (error) {
       console.error("Chat error:", error);
       logToTerminal(`System error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'error');
@@ -202,13 +299,25 @@ const AnonymousChat: React.FC = () => {
             </div>
           </div>
         </div>
-        <button 
-          onClick={clearChat}
-          className="p-2 text-gray-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
-          title="Clear History"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsTTSEnabled(!isTTSEnabled)}
+            className={cn(
+              "p-2 transition-colors rounded-lg",
+              isTTSEnabled ? "text-cyan-400 hover:bg-cyan-400/10" : "text-gray-500 hover:bg-white/10"
+            )}
+            title={isTTSEnabled ? "Disable Voice" : "Enable Voice"}
+          >
+            {isTTSEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+          </button>
+          <button 
+            onClick={clearChat}
+            className="p-2 text-gray-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
+            title="Clear History"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -216,6 +325,7 @@ const AnonymousChat: React.FC = () => {
         ref={scrollRef}
         className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
       >
+        <audio ref={audioRef} className="hidden" />
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center text-center space-y-4 opacity-40">
             <ShieldAlert size={48} className="text-cyan-400" />
@@ -251,12 +361,24 @@ const AnonymousChat: React.FC = () => {
                 msg.role === 'user' ? "text-right" : "text-left"
               )}>
                 <div className={cn(
-                  "p-4 rounded-2xl text-sm leading-relaxed",
+                  "p-4 rounded-2xl text-sm leading-relaxed relative group/msg",
                   msg.role === 'user'
                     ? "bg-cyber-green/5 border border-cyber-green/20 text-white rounded-tr-none"
                     : "bg-white/5 border border-white/10 text-gray-300 rounded-tl-none"
                 )}>
                   {msg.text}
+                  
+                  {msg.role === 'model' && (
+                    <button 
+                      onClick={() => replayAudio(msg)}
+                      className={cn(
+                        "absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all opacity-0 group-hover/msg:opacity-100",
+                        isPlaying === msg.id ? "text-cyan-400 animate-pulse" : "text-gray-500 hover:text-cyan-400"
+                      )}
+                    >
+                      <PlayCircle size={16} />
+                    </button>
+                  )}
                 </div>
                 <span className="text-[10px] font-mono text-gray-600 block px-1">
                   {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
