@@ -1,5 +1,6 @@
 /* COPYRIGHT ALEN PEPA */
 import React from 'react';
+import { cn } from '@/src/lib/utils';
 import { motion } from 'motion/react';
 import { 
   Settings, 
@@ -18,7 +19,6 @@ import {
   Globe
 } from 'lucide-react';
 import { useSystem } from '../contexts/SystemContext';
-import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 
 const THEMES = [
