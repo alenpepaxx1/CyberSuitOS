@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
+import { GoogleGenAI } from "@google/genai";
 
 // Load Pyodide from CDN
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js";
@@ -29,63 +30,126 @@ interface Script {
   name: string;
   code: string;
   description: string;
-  category: 'Network' | 'Crypto' | 'Web' | 'Utility';
+  category: 'Network' | 'Crypto' | 'Web' | 'Utility' | 'Data';
 }
 
 const DEFAULT_SCRIPTS: Script[] = [
   {
     id: '1',
-    name: 'Port Scanner Simulation',
+    name: 'Network Scanner Pro',
     category: 'Network',
-    description: 'A simple script to simulate scanning common ports.',
+    description: 'Advanced network scanning simulation with latency and service detection.',
     code: `import time
 import random
 
-def scan_ports(target):
-    print(f"[*] Starting scan on {target}...")
-    common_ports = [21, 22, 23, 25, 53, 80, 110, 443, 3306, 8080]
+def scan_network(subnet):
+    print(f"[*] Initializing Neural Network Scan on {subnet}...")
+    print(f"[*] Loading service signatures...")
+    time.sleep(0.5)
     
-    for port in common_ports:
-        time.sleep(0.1) # Simulate network delay
-        status = "OPEN" if random.random() > 0.7 else "CLOSED"
-        print(f"[+] Port {port}: {status}")
+    hosts = []
+    for i in range(1, 10):
+        if random.random() > 0.4:
+            ip = f"{subnet}.{i}"
+            latency = round(random.uniform(10, 150), 2)
+            services = random.sample(['SSH', 'HTTP', 'HTTPS', 'FTP', 'MySQL', 'Redis'], random.randint(1, 3))
+            hosts.append({"ip": ip, "latency": latency, "services": services})
+            
+    print(f"[+] Found {len(hosts)} active hosts.")
+    print("-" * 50)
+    print(f"{'IP ADDRESS':<15} | {'LATENCY':<10} | {'SERVICES'}")
+    print("-" * 50)
     
-    print("[*] Scan complete.")
+    for host in hosts:
+        time.sleep(0.2)
+        services_str = ", ".join(host['services'])
+        print(f"{host['ip']:<15} | {host['latency']:<7} ms | {services_str}")
 
-scan_ports("192.168.1.1")`
+scan_network("192.168.1")`
   },
   {
     id: '2',
-    name: 'Base64 Encoder/Decoder',
+    name: 'AES-256 Simulation',
     category: 'Crypto',
-    description: 'Encodes and decodes strings using base64.',
-    code: `import base64
+    description: 'Simulates AES encryption process with key expansion and rounds.',
+    code: `import hashlib
+import os
 
-def process_data(data):
-    # Encoding
-    encoded = base64.b64encode(data.encode()).decode()
-    print(f"Encoded: {encoded}")
+def simulate_aes(data, key):
+    print(f"[*] Starting AES-256 Simulation...")
+    print(f"[*] Input: {data}")
     
-    # Decoding
-    decoded = base64.b64decode(encoded.encode()).decode()
-    print(f"Decoded: {decoded}")
+    # Key Expansion
+    expanded_key = hashlib.sha256(key.encode()).hexdigest()
+    print(f"[*] Key Expanded: {expanded_key[:16]}...")
+    
+    # Rounds
+    for i in range(1, 5):
+        time_delay = 0.1
+        print(f"[>] Round {i}: SubBytes -> ShiftRows -> MixColumns -> AddRoundKey")
+        
+    # Final Result (Simulated)
+    ciphertext = hashlib.sha256((data + expanded_key).encode()).hexdigest()
+    print(f"[+] Encryption Complete.")
+    print(f"[+] Ciphertext: {ciphertext}")
 
-process_data("CyberSuite OS Neural Core")`
+simulate_aes("TOP_SECRET_CARGO", "NEURAL_CORE_ALPHA")`
   },
   {
     id: '3',
-    name: 'Password Generator',
-    category: 'Crypto',
-    description: 'Generates a secure random password.',
+    name: 'Data Analysis Engine',
+    category: 'Data',
+    description: 'Processes system logs and generates statistical insights.',
     code: `import random
-import string
+from collections import Counter
 
-def generate_password(length=16):
-    chars = string.ascii_letters + string.digits + string.punctuation
-    password = ''.join(random.choice(chars) for _ in range(length))
-    return password
+def analyze_logs(count=100):
+    print(f"[*] Analyzing {count} system log entries...")
+    
+    event_types = ['AUTH_SUCCESS', 'AUTH_FAILURE', 'FILE_ACCESS', 'NET_CONNECT', 'SYS_UPDATE']
+    logs = [random.choice(event_types) for _ in range(count)]
+    
+    stats = Counter(logs)
+    
+    print("-" * 30)
+    print(f"{'EVENT TYPE':<15} | {'COUNT':<5} | {'PERCENT'}")
+    print("-" * 30)
+    
+    for event, count_val in stats.items():
+        percent = (count_val / count) * 100
+        print(f"{event:<15} | {count_val:<5} | {percent:>6.1f}%")
+    
+    print("-" * 30)
+    most_common = stats.most_common(1)[0]
+    print(f"[!] Critical Insight: {most_common[0]} is the dominant event.")
 
-print(f"Generated Secure Password: {generate_password()}")`
+analyze_logs(500)`
+  },
+  {
+    id: '4',
+    name: 'Web Scraper (Mock)',
+    category: 'Web',
+    description: 'Simulates scraping security advisories from a list of URLs.',
+    code: `import json
+
+def scrape_advisories():
+    print("[*] Connecting to Global Threat Database...")
+    targets = ["https://cve.mitre.org", "https://nvd.nist.gov", "https://security.google.com"]
+    
+    results = []
+    for url in targets:
+        print(f"[*] Fetching data from {url}...")
+        # In a real environment, we'd use requests/urllib
+        results.append({
+            "source": url,
+            "status": 200,
+            "findings": random.randint(5, 25)
+        })
+        
+    print("[+] Aggregated Results:")
+    print(json.dumps(results, indent=2))
+
+scrape_advisories()`
   }
 ];
 
@@ -96,6 +160,10 @@ export default function PythonLab() {
   const [isPyodideLoading, setIsPyodideLoading] = useState(true);
   const [pyodide, setPyodide] = useState<any>(null);
   const [activeScript, setActiveScript] = useState<string>(DEFAULT_SCRIPTS[0].id);
+  const [installedPackages, setInstalledPackages] = useState<string[]>([]);
+  const [isInstalling, setIsInstalling] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const outputEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -161,6 +229,42 @@ export default function PythonLab() {
   const clearOutput = () => {
     setOutput([]);
     logToTerminal("Python output cleared.", "warn");
+  };
+
+  const installPackage = async (pkg: string) => {
+    if (!pyodide || isInstalling) return;
+    setIsInstalling(true);
+    logToTerminal(`Installing Python package: ${pkg}...`, "info");
+    try {
+      await pyodide.loadPackage(pkg);
+      setInstalledPackages(prev => [...prev, pkg]);
+      logToTerminal(`Package ${pkg} installed successfully.`, "success");
+    } catch (err: any) {
+      logToTerminal(`Failed to install ${pkg}: ${err.message}`, "error");
+    } finally {
+      setIsInstalling(false);
+    }
+  };
+
+  const analyzeCode = async () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey || isAnalyzing) return;
+
+    setIsAnalyzing(true);
+    logToTerminal("AI Analyst is reviewing your code...", "info");
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analyze this Python code for security vulnerabilities, performance issues, and best practices. Provide a concise summary with actionable advice.\n\nCode:\n${code}`,
+      });
+      setAiAnalysis(response.text || "No analysis available.");
+      logToTerminal("AI Code Analysis complete.", "success");
+    } catch (err) {
+      logToTerminal("AI Analysis failed.", "error");
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   const selectScript = (script: Script) => {
@@ -233,6 +337,37 @@ export default function PythonLab() {
           </div>
 
           <div className="bg-cyber-card border border-cyber-border rounded-xl p-4">
+            <h3 className="text-sm font-mono font-bold text-white mb-4 flex items-center gap-2">
+              <Cpu size={16} className="text-purple-400" />
+              PACKAGE_MANAGER
+            </h3>
+            <div className="space-y-2">
+              {['numpy', 'pandas', 'matplotlib', 'scipy'].map((pkg) => (
+                <button
+                  key={pkg}
+                  onClick={() => installPackage(pkg)}
+                  disabled={isInstalling || installedPackages.includes(pkg)}
+                  className={cn(
+                    "w-full flex items-center justify-between p-2 rounded-lg border text-[10px] font-mono transition-all",
+                    installedPackages.includes(pkg)
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500"
+                      : "bg-white/5 border-transparent hover:border-white/10 text-gray-400"
+                  )}
+                >
+                  <span>{pkg.toUpperCase()}</span>
+                  {installedPackages.includes(pkg) ? (
+                    <CheckCircle2 size={12} />
+                  ) : isInstalling ? (
+                    <Loader2 size={12} className="animate-spin" />
+                  ) : (
+                    <Download size={12} />
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-cyber-card border border-cyber-border rounded-xl p-4">
             <h3 className="text-sm font-mono font-bold text-white mb-2 flex items-center gap-2">
               <Sparkles size={16} className="text-yellow-500" />
               SYSTEM_INFO
@@ -269,6 +404,14 @@ export default function PythonLab() {
               </div>
               <div className="flex items-center gap-2">
                 <button 
+                  onClick={analyzeCode}
+                  disabled={isAnalyzing || !process.env.GEMINI_API_KEY}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/20 text-purple-400 border border-purple-500/30 rounded-lg text-xs font-bold hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                >
+                  {isAnalyzing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  AI_ANALYZE
+                </button>
+                <button 
                   onClick={runCode}
                   disabled={isPyodideLoading || isRunning}
                   className="flex items-center gap-2 px-3 py-1.5 bg-cyber-green/20 text-cyber-green border border-cyber-green/30 rounded-lg text-xs font-bold hover:bg-cyber-green/30 transition-colors disabled:opacity-50"
@@ -278,13 +421,48 @@ export default function PythonLab() {
                 </button>
               </div>
             </div>
-            <textarea
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              spellCheck={false}
-              className="flex-1 bg-cyber-bg p-6 font-mono text-sm text-gray-300 focus:outline-none resize-none custom-scrollbar"
-            />
+            <div className="flex-1 flex overflow-hidden">
+              <div className="w-12 bg-black/20 border-r border-cyber-border flex flex-col items-center py-6 text-[10px] font-mono text-gray-600 select-none">
+                {code.split('\n').map((_, i) => (
+                  <div key={i} className="h-5 leading-5">{i + 1}</div>
+                ))}
+              </div>
+              <textarea
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                spellCheck={false}
+                className="flex-1 bg-cyber-bg p-6 font-mono text-sm text-gray-300 focus:outline-none resize-none custom-scrollbar leading-5"
+              />
+            </div>
           </div>
+
+          {/* AI Analysis Overlay */}
+          <AnimatePresence>
+            {aiAnalysis && (
+              <motion.div 
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-purple-500/5 border border-purple-500/20 rounded-xl p-4 relative overflow-hidden"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2 text-purple-400">
+                    <Sparkles size={14} />
+                    <span className="text-xs font-bold uppercase tracking-wider">AI Security & Code Analysis</span>
+                  </div>
+                  <button 
+                    onClick={() => setAiAnalysis(null)}
+                    className="text-gray-500 hover:text-white transition-colors"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+                <div className="text-xs text-gray-400 leading-relaxed font-mono whitespace-pre-wrap">
+                  {aiAnalysis}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Output Terminal */}
           <div className="bg-cyber-card border border-cyber-border rounded-xl overflow-hidden flex flex-col h-[250px]">
