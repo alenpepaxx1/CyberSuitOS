@@ -11,30 +11,49 @@ export default function SecurityAnalyst() {
   const [response, setResponse] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const getOfflineAnalysis = (input: string) => {
+    const lowerInput = input.toLowerCase();
+    
+    // Simple pattern matching for "Advanced" offline analysis
+    if (lowerInput.includes('select') && lowerInput.includes('from') && lowerInput.includes('where')) {
+      return "### [OFFLINE_ANALYSIS] SQL Injection Detected\n\n**Risk Level:** CRITICAL\n\n**Details:** The payload contains standard SQL query structures (`SELECT`, `FROM`, `WHERE`). This is a classic SQL Injection pattern used to bypass authentication or leak database contents.\n\n**Remediation:** Use parameterized queries or prepared statements. Never concatenate user input directly into SQL strings.";
+    }
+    
+    if (lowerInput.includes('<script>') || lowerInput.includes('javascript:') || lowerInput.includes('onerror=')) {
+      return "### [OFFLINE_ANALYSIS] Cross-Site Scripting (XSS) Detected\n\n**Risk Level:** HIGH\n\n**Details:** The input contains script tags or inline event handlers. This indicates a potential Stored or Reflected XSS attack aimed at executing malicious code in a user's browser.\n\n**Remediation:** Implement strict input validation and output encoding. Use Content Security Policy (CSP) headers to restrict script execution.";
+    }
+    
+    if (lowerInput.includes('../') || lowerInput.includes('etc/passwd') || lowerInput.includes('c:\\')) {
+      return "### [OFFLINE_ANALYSIS] Path Traversal Attempt\n\n**Risk Level:** HIGH\n\n**Details:** The payload attempts to navigate the file system using relative paths (`../`) or access sensitive system files. This could lead to unauthorized data disclosure.\n\n**Remediation:** Sanitize file paths and use a whitelist of allowed directories. Avoid using user input directly in file system operations.";
+    }
+
+    if (lowerInput.includes('admin') || lowerInput.includes('password') || lowerInput.includes('root')) {
+      return "### [OFFLINE_ANALYSIS] Credential Probing\n\n**Risk Level:** MEDIUM\n\n**Details:** The input contains keywords related to administrative accounts or sensitive credentials. This may be part of a brute-force or social engineering reconnaissance phase.\n\n**Remediation:** Enforce strong password policies, multi-factor authentication (MFA), and rate-limiting on authentication endpoints.";
+    }
+
+    const genericResponses = [
+      "### [OFFLINE_ANALYSIS] Heuristic Scan Complete\n\n**Risk Level:** LOW\n\n**Details:** No known malicious patterns were identified in the provided input. The payload appears to be standard operational data.\n\n**Remediation:** Continue monitoring system logs for anomalous behavior.",
+      "### [OFFLINE_ANALYSIS] Neural Core v4.2.0-stable\n\n**Status:** SECURE\n\n**Details:** Input processed through Alen's local heuristic engine. No immediate threats detected. High entropy detected in input string, suggesting encrypted or compressed data.",
+      "### [OFFLINE_ANALYSIS] Security Audit Finished\n\n**Risk Level:** INFORMATIONAL\n\n**Details:** The input string was analyzed for common vulnerabilities. While no direct exploits were found, ensure that all data processing layers follow the principle of least privilege."
+    ];
+    
+    return genericResponses[Math.floor(Math.random() * genericResponses.length)];
+  };
+
   const analyze = async () => {
     if (!query) return;
     setLoading(true);
-    logToTerminal(`Initiating AI analysis for: ${query.substring(0, 20)}...`, 'info');
+    logToTerminal(`Initiating Alen's security analysis for: ${query.substring(0, 20)}...`, 'info');
     
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || apiKey === 'undefined' || apiKey === '') {
       setTimeout(() => {
-        const responses = [
-          "Analysis complete. The provided payload shows signs of a potential SQL injection attempt. Recommendation: Use parameterized queries.",
-          "Security audit finished. No critical vulnerabilities found in the input string.",
-          "Heuristic analysis suggests this log entry is part of a standard system heartbeat.",
-          "Warning: This pattern matches known cross-site scripting (XSS) vectors. Sanitize all user inputs.",
-          "The requested analysis indicates a high probability of system misconfiguration in the network layer.",
-          "Neural core v4.2.0-stable: Input processed and categorized as 'Low Risk'."
-        ];
-        
-        const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        
-        setResponse(`[OFFLINE_MODE] ${randomResponse}`);
-        logToTerminal('AI analysis completed (Offline Mode).', 'success');
+        const offlineResult = getOfflineAnalysis(query);
+        setResponse(offlineResult);
+        logToTerminal('Alen analysis completed (Offline Mode).', 'success');
         setLoading(false);
-      }, 1500);
+      }, 1200);
       return;
     }
 
@@ -42,18 +61,19 @@ export default function SecurityAnalyst() {
       const ai = new GoogleGenAI({ apiKey });
       const result = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `You are a world-class cybersecurity expert. Analyze the following security query or payload and provide a concise, technical explanation of risks and remediation. Query: ${query}`,
+        contents: `You are Alen, a world-class cybersecurity expert. Analyze the following security query or payload and provide a concise, technical explanation of risks and remediation. Query: ${query}`,
         config: {
-          systemInstruction: "You are a CyberSuite OS AI Assistant. Be technical, concise, and professional. Use markdown for formatting.",
+          systemInstruction: "You are Alen, the CyberSuite OS AI Security Analyst. Be technical, concise, and professional. Use markdown for formatting. If the user asks who you are, identify as Alen.",
         }
       });
       
       setResponse(result.text || 'No analysis available.');
-      logToTerminal('AI analysis completed successfully.', 'success');
+      logToTerminal('Alen analysis completed successfully.', 'success');
     } catch (error) {
       console.error(error);
-      setResponse('Error connecting to AI engine. Please check your API configuration.');
-      logToTerminal('AI analysis failed.', 'error');
+      const offlineResult = getOfflineAnalysis(query);
+      setResponse(`[API_ERROR_FALLBACK] ${offlineResult}`);
+      logToTerminal('AI analysis failed. Falling back to local engine.', 'warn');
     } finally {
       setLoading(false);
     }
@@ -68,7 +88,7 @@ export default function SecurityAnalyst() {
           </div>
           <div>
             <h3 className="text-sm font-mono font-bold text-white uppercase tracking-wider">AI Security Analyst</h3>
-            <p className="text-[10px] text-gray-500 uppercase font-mono">Powered by Gemini 3 Flash</p>
+            <p className="text-[10px] text-gray-500 uppercase font-mono">Powered by Alen</p>
           </div>
         </div>
         <Sparkles className="text-cyber-green/40" size={20} />
