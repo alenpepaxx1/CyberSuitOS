@@ -1,5 +1,6 @@
 /* COPYRIGHT ALEN PEPA */
 import React, { useState, useEffect, useRef } from 'react';
+import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Play, 
@@ -18,7 +19,6 @@ import {
   AlertCircle,
   CheckCircle2
 } from 'lucide-react';
-import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 import { GoogleGenAI } from "@google/genai";
 
