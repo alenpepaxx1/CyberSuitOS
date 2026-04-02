@@ -59,8 +59,21 @@ interface DashboardProps {
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const { stats, firewallEnabled, vpnEnabled, userName, clearanceLevel } = useSystem();
+  const [attackTrends, setAttackTrends] = useState(ATTACK_TRENDS);
+  const [geoData, setGeoData] = useState(GEOGRAPHIC_DATA);
+  const [mapNodes, setMapNodes] = useState<any[]>([]);
   const [threatNews, setThreatNews] = useState<ThreatNews[]>([]);
+  const [tickerIndex, setTickerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+
+  const TICKER_MESSAGES = [
+    "CRITICAL: Zero-day exploit detected in major CDN provider",
+    "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+    "INFO: New ransomware strain 'CyberLock' identified by AI core",
+    "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+    "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+    "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+  ];
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [systemLoad, setSystemLoad] = useState(42);
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -141,17 +154,38 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     try {
       const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
+      
+      // Fetch News
+      const newsResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Generate a list of 5 current global cybersecurity threat intelligence updates from the last 48 hours. Return a JSON array of objects with 'title', 'summary', 'severity' (low, medium, high, critical), 'timestamp', 'source' (e.g., Krebs on Security, BleepingComputer, The Hacker News), and 'link' (a real URL to the news article).",
+        contents: "Generate a list of 6 current global cybersecurity threat intelligence updates from the last 24-48 hours. Return a JSON array of objects with 'title', 'summary', 'severity' (low, medium, high, critical), 'timestamp', 'source', and 'link' (real URL).",
         config: { 
           responseMimeType: "application/json",
           tools: [{ googleSearch: {} }]
         }
       });
-      
-      const data = JSON.parse(response.text || '[]');
-      setThreatNews(data);
+      const newsData = JSON.parse(newsResponse.text || '[]');
+      setThreatNews(newsData);
+
+      // Fetch Trends & Geo Data
+      const trendsResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analyze current global cyber attack trends for today. 
+        Return a JSON object with:
+        1. 'trends': an array of 7 objects with 'time' (HH:00) and 'attacks' (number), 'blocked' (number).
+        2. 'geo': an array of 4 objects with 'name' (Region), 'value' (percentage), 'color' (hex).
+        3. 'mapNodes': an array of 10 objects with 'long', 'lat', 'city', 'country', 'type' ('attack'|'node'), 'threatLevel', 'ip', 'attackType'.
+        Focus on real current hotspots (e.g., Eastern Europe, East Asia, North America).`,
+        config: { 
+          responseMimeType: "application/json",
+          tools: [{ googleSearch: {} }]
+        }
+      });
+      const trendsData = JSON.parse(trendsResponse.text || '{}');
+      if (trendsData.trends) setAttackTrends(trendsData.trends);
+      if (trendsData.geo) setGeoData(trendsData.geo);
+      if (trendsData.mapNodes) setMapNodes(trendsData.mapNodes);
+
       setLastUpdated(new Date());
     } catch (error) {
       console.error("Failed to fetch threat intelligence:", error);
@@ -205,15 +239,40 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     const logInterval = setInterval(fetchRealLogs, 4000);
 
+    const tickerInterval = setInterval(() => {
+      setTickerIndex((prev) => (prev + 1) % TICKER_MESSAGES.length);
+    }, 5000);
+
     return () => {
       clearInterval(interval);
       clearInterval(loadInterval);
       clearInterval(logInterval);
+      clearInterval(tickerInterval);
     };
   }, [isPaused]);
 
   return (
     <div className="space-y-6 p-6 bg-[#050505] min-h-full rounded-2xl border border-[#222]">
+      {/* Live Ticker */}
+      <div className="bg-red-500/10 border border-red-500/20 py-2 px-4 rounded-lg overflow-hidden whitespace-nowrap relative mb-4">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-red-500 font-mono text-[10px] font-bold uppercase shrink-0">
+            <ShieldAlert size={12} /> LIVE THREAT FEED:
+          </div>
+          <AnimatePresence mode="wait">
+            <motion.span
+              key={tickerIndex}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="text-[10px] font-mono text-gray-300 uppercase tracking-widest truncate"
+            >
+              {TICKER_MESSAGES[tickerIndex]}
+            </motion.span>
+          </AnimatePresence>
+        </div>
+      </div>
+
       {/* Top Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
@@ -349,7 +408,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
         </div>
         <div className="h-[400px] w-full relative bg-black/20">
-          <ThreatMap onAction={onNavigate} />
+          <ThreatMap onAction={onNavigate} initialNodes={mapNodes} />
           
           {/* Map Overlay HUD */}
           <div className="absolute top-4 left-4 pointer-events-none space-y-2">
@@ -390,7 +449,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={ATTACK_TRENDS}>
+              <AreaChart data={attackTrends}>
                 <defs>
                   <linearGradient id="colorAttacks" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
@@ -450,7 +509,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={GEOGRAPHIC_DATA}
+                  data={geoData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -458,7 +517,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {GEOGRAPHIC_DATA.map((entry, index) => (
+                  {geoData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -469,7 +528,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </ResponsiveContainer>
           </div>
           <div className="space-y-3">
-            {GEOGRAPHIC_DATA.map((item, i) => (
+            {geoData.map((item: any, i: number) => (
               <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full" style={{ backgroundColor: item.color }} />
