@@ -4,6 +4,9 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import os from "os";
+import dns from "dns";
+import https from "https";
+import http from "http";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -132,6 +135,91 @@ async function startServer() {
     });
 
     res.json({ nodes, links });
+  });
+
+  // Advanced Vulnerability Scanner API
+  app.get("/api/scan", async (req, res) => {
+    const target = req.query.target as string;
+    if (!target) {
+      return res.status(400).json({ error: "Target is required" });
+    }
+
+    const results: any = {
+      target,
+      timestamp: new Date().toISOString(),
+      dns: {},
+      headers: {},
+      ssl: null,
+      whois: { status: "Simulated for privacy/performance" }
+    };
+
+    try {
+      // 1. DNS Lookup
+      const hostname = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+      try {
+        const addresses = await new Promise<string[]>((resolve, reject) => {
+          dns.resolve4(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
+        });
+        results.dns.a = addresses;
+        
+        try {
+          const mx = await new Promise<any[]>((resolve, reject) => {
+            dns.resolveMx(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
+          });
+          results.dns.mx = mx;
+        } catch (e) {}
+
+        try {
+          const txt = await new Promise<string[][]>((resolve, reject) => {
+            dns.resolveTxt(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
+          });
+          results.dns.txt = txt;
+        } catch (e) {}
+      } catch (e) {
+        results.dns.error = "DNS resolution failed";
+      }
+
+      // 2. HTTP Headers & SSL
+      const protocol = target.startsWith('https') ? https : http;
+      const url = target.startsWith('http') ? target : `http://${target}`;
+      
+      await new Promise((resolve) => {
+        const req = protocol.get(url, (response) => {
+          results.headers = response.headers;
+          results.statusCode = response.statusCode;
+          
+          if (response.socket && (response.socket as any).getPeerCertificate) {
+            const cert = (response.socket as any).getPeerCertificate();
+            if (cert && Object.keys(cert).length > 0) {
+              results.ssl = {
+                subject: cert.subject,
+                issuer: cert.issuer,
+                valid_from: cert.valid_from,
+                valid_to: cert.valid_to,
+                fingerprint: cert.fingerprint,
+                serialNumber: cert.serialNumber
+              };
+            }
+          }
+          resolve(null);
+        });
+        
+        req.on('error', (e) => {
+          results.error = e.message;
+          resolve(null);
+        });
+        
+        req.setTimeout(5000, () => {
+          req.destroy();
+          resolve(null);
+        });
+      });
+
+    } catch (error) {
+      results.error = "Scan failed";
+    }
+
+    res.json(results);
   });
 
   if (process.env.NODE_ENV !== "production") {
