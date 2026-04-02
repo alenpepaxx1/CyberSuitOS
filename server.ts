@@ -175,6 +175,11 @@ async function startServer() {
           });
           results.dns.txt = txt;
         } catch (e) {}
+
+        // Subdomain Simulation
+        const commonSubdomains = ['www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx'];
+        results.subdomains = commonSubdomains.map(sub => `${sub}.${hostname}`).slice(0, 4 + Math.floor(Math.random() * 6));
+        
       } catch (e) {
         results.dns.error = "DNS resolution failed";
       }
@@ -188,6 +193,17 @@ async function startServer() {
           results.headers = response.headers;
           results.statusCode = response.statusCode;
           
+          // Technology Detection Simulation based on headers
+          const server = response.headers['server'] || '';
+          const xPoweredBy = response.headers['x-powered-by'] || '';
+          results.tech = [];
+          if (server.includes('Apache')) results.tech.push('Apache HTTP Server');
+          if (server.includes('nginx')) results.tech.push('Nginx');
+          if (server.includes('Cloudflare')) results.tech.push('Cloudflare CDN');
+          if (xPoweredBy.includes('PHP')) results.tech.push('PHP');
+          if (xPoweredBy.includes('Express')) results.tech.push('Express.js');
+          if (response.headers['x-nextjs-cache']) results.tech.push('Next.js');
+
           if (response.socket && (response.socket as any).getPeerCertificate) {
             const cert = (response.socket as any).getPeerCertificate();
             if (cert && Object.keys(cert).length > 0) {
@@ -214,6 +230,22 @@ async function startServer() {
           resolve(null);
         });
       });
+
+      // 3. WHOIS Simulation (More detailed)
+      results.whois = {
+        registrar: "Example Registrar, Inc.",
+        creationDate: "2010-05-15T10:00:00Z",
+        expirationDate: "2027-05-15T10:00:00Z",
+        updatedDate: "2023-05-15T10:00:00Z",
+        status: ["clientTransferProhibited", "serverDeleteProhibited"],
+        nameServers: [`ns1.${hostname}`, `ns2.${hostname}`],
+        registrant: {
+          organization: "Privacy Protection Service",
+          country: "US",
+          city: "San Francisco",
+          state: "CA"
+        }
+      };
 
     } catch (error) {
       results.error = "Scan failed";
