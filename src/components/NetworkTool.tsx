@@ -19,7 +19,8 @@ import {
   History,
   Trash2,
   Clock,
-  ChevronRight
+  ChevronRight,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -30,7 +31,7 @@ import { logToTerminal } from './Terminal';
 
 export default function NetworkTool() {
   const { toolTarget, setToolTarget } = useSystem();
-  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map' | 'subdomains' | 'graph'>('info');
   const [scanData, setScanData] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const [query, setQuery] = useState(toolTarget || '');
@@ -347,9 +348,11 @@ This is a simulated AI analysis. For a comprehensive neural scan, please establi
                 {[
                   { id: 'info', label: 'General Info', icon: Globe },
                   { id: 'dns', label: 'DNS Records', icon: Network },
+                  { id: 'subdomains', label: 'Subdomains', icon: Network },
                   { id: 'whois', label: 'WHOIS Data', icon: Database },
                   { id: 'threat', label: 'Threat Intel', icon: Shield },
                   { id: 'map', label: 'Geo Map', icon: MapPin },
+                  { id: 'graph', label: 'Infrastructure', icon: Activity },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -545,48 +548,103 @@ This is a simulated AI analysis. For a comprehensive neural scan, please establi
                   </div>
                 )}
 
-                {activeTab === 'threat' && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 bg-red-500/5 border border-red-500/20 rounded-xl space-y-2">
-                        <div className="text-[10px] font-mono text-red-500 uppercase tracking-widest">Risk Score</div>
-                        <div className="text-2xl font-bold text-white">12/100</div>
-                        <div className="text-[10px] text-gray-500 uppercase font-mono">Low Threat Level</div>
-                      </div>
-                      <div className="p-4 bg-orange-500/5 border border-orange-500/20 rounded-xl space-y-2">
-                        <div className="text-[10px] font-mono text-orange-500 uppercase tracking-widest">Blacklist Status</div>
-                        <div className="text-2xl font-bold text-white">Clean</div>
-                        <div className="text-[10px] text-gray-500 uppercase font-mono">0/64 Engines Detected</div>
-                      </div>
-                      <div className="p-4 bg-blue-500/5 border border-blue-500/20 rounded-xl space-y-2">
-                        <div className="text-[10px] font-mono text-blue-500 uppercase tracking-widest">Known Malicious</div>
-                        <div className="text-2xl font-bold text-white">None</div>
-                        <div className="text-[10px] text-gray-500 uppercase font-mono">No active campaigns</div>
-                      </div>
+                {activeTab === 'subdomains' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Network className="text-orange-400" size={18} />
+                      <h3 className="text-sm font-mono font-bold text-white uppercase">Discovered Subdomains</h3>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {result.subdomains?.map((sub: string, i: number) => (
+                        <div key={i} className="p-3 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between group hover:border-orange-500/30 transition-all">
+                          <span className="text-xs font-mono text-gray-300">{sub}</span>
+                          <button 
+                            onClick={() => {
+                              setQuery(sub);
+                              lookupIP();
+                            }}
+                            className="text-[10px] font-mono text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            [RE-SCAN]
+                          </button>
+                        </div>
+                      )) || (
+                        <div className="col-span-2 py-8 text-center text-gray-500 font-mono text-xs">
+                          No subdomains discovered. Try a root domain.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
-                    <div className="bg-black/20 border border-cyber-border p-6 rounded-xl space-y-4">
-                      <div className="flex items-center gap-2 text-cyber-green text-xs font-mono uppercase tracking-widest">
-                        <Shield size={14} /> Threat Intelligence Feed
-                      </div>
-                      <div className="space-y-3">
-                        {[
-                          { event: 'IP Reputation Check', status: 'Safe', source: 'AlienVault OTX' },
-                          { event: 'Malware Domain List', status: 'Not Found', source: 'MDL' },
-                          { event: 'Phishing Database', status: 'Clean', source: 'PhishTank' },
-                          { event: 'Spamhaus Blocklist', status: 'Not Listed', source: 'Spamhaus' },
-                        ].map((item, i) => (
-                          <div key={i} className="flex items-center justify-between p-3 bg-black/40 border border-cyber-border rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <div className="w-2 h-2 rounded-full bg-cyber-green animate-pulse" />
-                              <span className="text-xs text-white font-mono">{item.event}</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-[10px] text-gray-500 font-mono uppercase">{item.source}</span>
-                              <span className="text-[10px] text-cyber-green font-mono font-bold uppercase">{item.status}</span>
-                            </div>
+                {activeTab === 'graph' && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Activity className="text-blue-400" size={18} />
+                      <h3 className="text-sm font-mono font-bold text-white uppercase">Infrastructure Graph</h3>
+                    </div>
+                    <div className="h-[400px] bg-black/40 rounded-xl border border-white/5 relative overflow-hidden flex items-center justify-center">
+                      {/* Simulated Graph Visualization */}
+                      <div className="relative w-full h-full">
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <div className="relative">
+                            {/* Central Node */}
+                            <motion.div 
+                              animate={{ scale: [1, 1.1, 1] }}
+                              transition={{ duration: 2, repeat: Infinity }}
+                              className="w-16 h-16 rounded-full bg-orange-500/20 border-2 border-orange-500 flex items-center justify-center z-10 relative"
+                            >
+                              <Globe className="text-orange-500" size={24} />
+                            </motion.div>
+                            
+                            {/* Orbiting Nodes */}
+                            {[
+                              { icon: Search, label: 'DNS', angle: 0 },
+                              { icon: Shield, label: 'WAF', angle: 72 },
+                              { icon: Database, label: 'DB', angle: 144 },
+                              { icon: Activity, label: 'CDN', angle: 216 },
+                              { icon: Network, label: 'API', angle: 288 },
+                            ].map((node, i) => {
+                              const radius = 120;
+                              const x = Math.cos((node.angle * Math.PI) / 180) * radius;
+                              const y = Math.sin((node.angle * Math.PI) / 180) * radius;
+                              
+                              return (
+                                <React.Fragment key={i}>
+                                  <div 
+                                    className="absolute w-px h-px bg-orange-500/30"
+                                    style={{ 
+                                      left: '50%', 
+                                      top: '50%', 
+                                      width: radius,
+                                      transform: `rotate(${node.angle}deg)`,
+                                      transformOrigin: 'left center'
+                                    }}
+                                  />
+                                  <motion.div
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    className="absolute w-10 h-10 rounded-lg bg-white/5 border border-white/10 flex flex-col items-center justify-center gap-1"
+                                    style={{ 
+                                      left: `calc(50% + ${x}px - 20px)`, 
+                                      top: `calc(50% + ${y}px - 20px)` 
+                                    }}
+                                  >
+                                    <node.icon className="text-gray-400" size={14} />
+                                    <span className="text-[8px] font-mono text-gray-500">{node.label}</span>
+                                  </motion.div>
+                                </React.Fragment>
+                              );
+                            })}
                           </div>
-                        ))}
+                        </div>
+                        <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
+                          <div className="space-y-1">
+                            <div className="text-[10px] font-mono text-orange-400 uppercase">TARGET: {result.query}</div>
+                            <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">INFRASTRUCTURE CONFIDENCE: 92%</div>
+                          </div>
+                          <div className="text-[10px] font-mono text-gray-500 animate-pulse uppercase tracking-widest">LIVE MONITORING...</div>
+                        </div>
                       </div>
                     </div>
                   </div>
