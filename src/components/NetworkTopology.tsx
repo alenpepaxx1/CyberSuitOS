@@ -38,6 +38,8 @@ export default function NetworkTopology() {
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [stats, setStats] = useState({
     totalNodes: 0,
     compromised: 0,
@@ -177,6 +179,7 @@ export default function NetworkTopology() {
         g.attr('transform', event.transform);
         setZoomLevel(event.transform.k);
       });
+    zoomRef.current = zoom;
 
     svg.call(zoom);
 
@@ -399,7 +402,10 @@ export default function NetworkTopology() {
   }, [nodes, zoomLevel]);
 
   return (
-    <div className="flex flex-col h-full cyber-card rounded-lg overflow-hidden bg-black/20 backdrop-blur-sm border border-white/5 relative">
+    <div className={cn(
+      "flex flex-col cyber-card rounded-lg overflow-hidden bg-black/20 backdrop-blur-sm border border-white/5 relative",
+      isFullScreen ? "fixed inset-0 z-50 h-screen w-screen rounded-none" : "h-full"
+    )}>
       <div className="corner-accent corner-tl" />
       <div className="corner-accent corner-tr" />
       
@@ -501,16 +507,47 @@ export default function NetworkTopology() {
 
         {/* Zoom Controls */}
         <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-10">
-          <button className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl">
+          <button 
+            onClick={() => {
+              if (svgRef.current && zoomRef.current) {
+                d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.scaleBy as any, 1.5);
+              }
+            }}
+            className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl"
+            title="Zoom In"
+          >
             <ZoomIn size={16} />
           </button>
-          <button className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl">
+          <button 
+            onClick={() => {
+              if (svgRef.current && zoomRef.current) {
+                d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.scaleBy as any, 0.667);
+              }
+            }}
+            className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl"
+            title="Zoom Out"
+          >
             <ZoomOut size={16} />
           </button>
-          <button className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl mt-2">
-            <Maximize2 size={16} />
+          <button 
+            onClick={() => setIsFullScreen(!isFullScreen)}
+            className="p-2 bg-black/60 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-black/80 transition-all shadow-xl mt-2"
+            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
+          >
+            {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
         </div>
+
+        {/* Full Screen Close Button */}
+        {isFullScreen && (
+          <button 
+            onClick={() => setIsFullScreen(false)}
+            className="absolute top-4 right-4 z-50 p-3 bg-red-500/20 backdrop-blur-md border border-red-500/50 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)]"
+            title="Close Full Screen"
+          >
+            <X size={24} />
+          </button>
+        )}
 
         {/* Legend */}
         <div className="absolute bottom-6 right-6 p-4 bg-black/60 border border-white/10 rounded-xl backdrop-blur-md z-10 shadow-xl">
