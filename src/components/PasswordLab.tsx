@@ -19,7 +19,11 @@ import {
   Info,
   ChevronRight,
   AlertTriangle,
-  Search
+  Search,
+  Brain,
+  Globe,
+  Fingerprint,
+  Network
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -60,12 +64,29 @@ export default function PasswordLab() {
     lowercase: true,
     numbers: true,
     symbols: true,
+    leetspeak: false,
   });
   const [copied, setCopied] = useState(false);
   const [showPassword, setShowPassword] = useState(true);
-  const [activeTab, setActiveTab] = useState<'audit' | 'hashing' | 'bruteforce'>('audit');
+  const [activeTab, setActiveTab] = useState<'audit' | 'hashing' | 'bruteforce' | 'ai-analysis'>('audit');
+  const [isPwned, setIsPwned] = useState<boolean | null>(null);
+  const [isCheckingPwned, setIsCheckingPwned] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const applyLeetspeak = (text: string) => {
+    return text
+      .replace(/[aA]/g, '4')
+      .replace(/[eE]/g, '3')
+      .replace(/[iI]/g, '1')
+      .replace(/[oO]/g, '0')
+      .replace(/[sS]/g, '5')
+      .replace(/[tT]/g, '7');
+  };
 
   const generatePassword = () => {
+    setIsPwned(null);
+    setAiAnalysis(null);
     if (mode === 'generator') {
       const charset = {
         uppercase: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
@@ -88,6 +109,11 @@ export default function PasswordLab() {
       for (let i = 0; i < length; i++) {
         generated += characters.charAt(array[i] % characters.length);
       }
+      
+      if (options.leetspeak) {
+        generated = applyLeetspeak(generated);
+      }
+      
       setPassword(generated);
     } else {
       let words = [];
@@ -96,7 +122,13 @@ export default function PasswordLab() {
       for (let i = 0; i < wordCount; i++) {
         words.push(WORD_LIST[array[i] % WORD_LIST.length]);
       }
-      setPassword(words.join('-'));
+      let generated = words.join('-');
+      
+      if (options.leetspeak) {
+        generated = applyLeetspeak(generated);
+      }
+      
+      setPassword(generated);
     }
     logToTerminal(`New ${mode} generated with high entropy.`, 'success');
   };
@@ -144,7 +176,8 @@ export default function PasswordLab() {
     const speeds = {
       consumer: 1e8,      // 100 Million/sec
       gpu_rig: 1e11,      // 100 Billion/sec
-      supercomputer: 1e15 // 1 Quadrillion/sec
+      supercomputer: 1e15, // 1 Quadrillion/sec
+      quantum: 1e21       // 1 Sextillion/sec (Theoretical Grover's algorithm speedup)
     };
 
     const formatTime = (seconds: number) => {
@@ -160,9 +193,55 @@ export default function PasswordLab() {
     return {
       consumer: formatTime(combinations / speeds.consumer),
       gpu_rig: formatTime(combinations / speeds.gpu_rig),
-      supercomputer: formatTime(combinations / speeds.supercomputer)
+      supercomputer: formatTime(combinations / speeds.supercomputer),
+      quantum: formatTime(combinations / speeds.quantum)
     };
   }, [stats.entropy]);
+
+  const checkPwnedDatabase = () => {
+    setIsCheckingPwned(true);
+    setIsPwned(null);
+    logToTerminal('Initiating secure k-Anonymity check against breach databases...', 'info');
+    
+    setTimeout(() => {
+      // Simulated check
+      const isCompromised = stats.entropy < 50 || password === 'password' || password === '123456';
+      setIsPwned(isCompromised);
+      setIsCheckingPwned(false);
+      logToTerminal(isCompromised ? 'WARNING: Password found in breach database!' : 'Password is safe. No breaches found.', isCompromised ? 'error' : 'success');
+    }, 2000);
+  };
+
+  const runAiAnalysis = async () => {
+    if (!password) return;
+    setIsAnalyzing(true);
+    logToTerminal('Initializing Neural Threat Analysis on password structure...', 'info');
+    
+    try {
+      const response = await fetch('/api/ai-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `Analyze this password from a cybersecurity perspective: "${password}". Provide a brief, highly technical 2-paragraph analysis of its structural weaknesses, predictability, and resistance to modern cracking techniques (dictionary, mask, rule-based, brute-force). Do not output markdown, just plain text.` }] }],
+          config: {
+            systemInstruction: "You are a CyberSuite OS Password Security Analyzer. Be highly technical, precise, and objective. Do not use markdown.",
+          }
+        })
+      });
+
+      if (!response.ok) throw new Error('AI Generation failed');
+
+      const resData = await response.json();
+      setAiAnalysis(resData.text);
+      logToTerminal('Neural Threat Analysis complete.', 'success');
+    } catch (error) {
+      console.error("Failed to generate analysis:", error);
+      setAiAnalysis("Analysis failed. Neural link severed.");
+      logToTerminal('Neural Threat Analysis failed.', 'error');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(password);
@@ -296,14 +375,14 @@ export default function PasswordLab() {
                       className={cn(
                         "flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200",
                         value 
-                          ? "bg-cyber-green/5 border-cyber-green/30 text-white" 
+                          ? "bg-cyber-green/5 border-cyber-green/30 text-white shadow-[0_0_10px_rgba(16,185,129,0.1)]" 
                           : "bg-white/5 border-white/5 text-gray-500 hover:border-white/10"
                       )}
                     >
                       <span className="text-[10px] font-mono uppercase tracking-widest">{key}</span>
                       <div className={cn(
                         "w-4 h-4 rounded border flex items-center justify-center transition-colors",
-                        value ? "bg-cyber-green border-cyber-green" : "border-gray-700"
+                        value ? "bg-cyber-green border-cyber-green shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "border-gray-700"
                       )}>
                         {value && <Check size={12} className="text-black font-bold" />}
                       </div>
@@ -312,22 +391,42 @@ export default function PasswordLab() {
                 </div>
               </>
             ) : (
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Word Count</label>
-                  <span className="font-mono text-cyber-green text-xs">{wordCount}</span>
+              <div className="space-y-6">
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">Word Count</label>
+                    <span className="font-mono text-cyber-green text-xs">{wordCount}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="3"
+                    max="10"
+                    value={wordCount}
+                    onChange={(e) => setWordCount(parseInt(e.target.value))}
+                    className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyber-green"
+                  />
+                  <p className="text-[9px] text-gray-600 leading-relaxed italic">
+                    Passphrases are often easier to remember but harder for machines to crack due to high length.
+                  </p>
                 </div>
-                <input
-                  type="range"
-                  min="3"
-                  max="10"
-                  value={wordCount}
-                  onChange={(e) => setWordCount(parseInt(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-lg appearance-none cursor-pointer accent-cyber-green"
-                />
-                <p className="text-[9px] text-gray-600 leading-relaxed italic">
-                  Passphrases are often easier to remember but harder for machines to crack due to high length.
-                </p>
+                
+                <button
+                  onClick={() => setOptions(prev => ({ ...prev, leetspeak: !prev.leetspeak }))}
+                  className={cn(
+                    "w-full flex items-center justify-between px-4 py-3 rounded-xl border transition-all duration-200",
+                    options.leetspeak 
+                      ? "bg-cyber-green/5 border-cyber-green/30 text-white shadow-[0_0_10px_rgba(16,185,129,0.1)]" 
+                      : "bg-white/5 border-white/5 text-gray-500 hover:border-white/10"
+                  )}
+                >
+                  <span className="text-[10px] font-mono uppercase tracking-widest">Leetspeak</span>
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-colors",
+                    options.leetspeak ? "bg-cyber-green border-cyber-green shadow-[0_0_5px_rgba(16,185,129,0.5)]" : "border-gray-700"
+                  )}>
+                    {options.leetspeak && <Check size={12} className="text-black font-bold" />}
+                  </div>
+                </button>
               </div>
             )}
           </div>
@@ -358,6 +457,7 @@ export default function PasswordLab() {
               { id: 'audit', label: 'Security Audit', icon: Search },
               { id: 'bruteforce', label: 'Cracking Estimation', icon: Activity },
               { id: 'hashing', label: 'Hash Simulator', icon: Hash },
+              { id: 'ai-analysis', label: 'AI Threat Analysis', icon: Brain },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -370,7 +470,7 @@ export default function PasswordLab() {
                 <tab.icon size={14} />
                 {tab.label}
                 {activeTab === tab.id && (
-                  <motion.div layoutId="activeTabPass" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyber-green" />
+                  <motion.div layoutId="activeTabPass" className="absolute bottom-0 left-0 right-0 h-0.5 bg-cyber-green shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
                 )}
               </button>
             ))}
@@ -405,28 +505,105 @@ export default function PasswordLab() {
                     </div>
 
                     <div className="p-6 bg-white/5 border border-white/5 rounded-2xl space-y-4">
-                      <h3 className="text-xs font-mono font-bold text-white uppercase tracking-widest flex items-center gap-2">
-                        <Info className="text-blue-400" size={16} />
-                        Security Tips
+                      <h3 className="text-xs font-mono font-bold text-white uppercase tracking-widest flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Globe className="text-blue-400" size={16} />
+                          Breach Database Check
+                        </div>
+                        {isPwned !== null && (
+                          <span className={cn("text-[9px] px-2 py-0.5 rounded-full border", isPwned ? "bg-red-500/10 text-red-500 border-red-500/30" : "bg-cyber-green/10 text-cyber-green border-cyber-green/30")}>
+                            {isPwned ? 'COMPROMISED' : 'SAFE'}
+                          </span>
+                        )}
                       </h3>
                       <div className="space-y-4">
                         <p className="text-[10px] text-gray-400 leading-relaxed">
-                          A password's strength is not just about its complexity, but its resistance to various attack vectors.
+                          Simulate a secure k-Anonymity check against known data breaches (e.g., Have I Been Pwned).
                         </p>
-                        <ul className="space-y-3">
-                          {[
-                            'Use a password manager to store unique keys.',
-                            'Avoid dictionary words in standard passwords.',
-                            'Rotate critical passwords every 90 days.',
-                            'Always enable Multi-Factor Authentication.'
-                          ].map((tip, i) => (
-                            <li key={i} className="flex items-center gap-3 text-[10px] text-gray-500">
-                              <ChevronRight className="text-cyber-green" size={12} />
-                              {tip}
-                            </li>
-                          ))}
-                        </ul>
+                        
+                        <button
+                          onClick={checkPwnedDatabase}
+                          disabled={isCheckingPwned}
+                          className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-mono text-[10px] font-bold uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                        >
+                          {isCheckingPwned ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Network className="w-4 h-4" />}
+                          {isCheckingPwned ? 'Querying Databases...' : 'Run Breach Check'}
+                        </button>
+
+                        <AnimatePresence>
+                          {isPwned !== null && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: 'auto' }}
+                              className={cn(
+                                "p-4 rounded-xl border text-[10px] leading-relaxed",
+                                isPwned ? "bg-red-500/10 border-red-500/20 text-red-400" : "bg-cyber-green/10 border-cyber-green/20 text-cyber-green"
+                              )}
+                            >
+                              {isPwned 
+                                ? "WARNING: This password has been found in known data breaches. It is highly vulnerable to dictionary and credential stuffing attacks. Do not use it." 
+                                : "Good news! This password was not found in any known data breaches. It appears to be unique."}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === 'ai-analysis' && (
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} className="space-y-8">
+                  <div className="bg-[#0a0a0a] border border-white/5 rounded-2xl overflow-hidden shadow-2xl relative">
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(16,185,129,0.05),transparent_50%)] pointer-events-none" />
+                    
+                    <div className="p-6 border-b border-white/5 bg-white/[0.02] flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-cyber-green/10 rounded-lg border border-cyber-green/20">
+                          <Brain className="w-5 h-5 text-cyber-green" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-mono font-bold text-white uppercase tracking-widest">Neural Threat Analysis</h3>
+                          <p className="text-[10px] text-gray-500 font-mono">AI-Powered Structural Password Evaluation</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={runAiAnalysis}
+                        disabled={isAnalyzing}
+                        className="px-6 py-2.5 bg-cyber-green hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-black rounded-xl font-mono text-[10px] font-bold uppercase tracking-widest transition-all flex items-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+                      >
+                        {isAnalyzing ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Fingerprint className="w-4 h-4" />}
+                        {isAnalyzing ? 'Analyzing...' : 'Run Analysis'}
+                      </button>
+                    </div>
+
+                    <div className="p-8 min-h-[300px] flex flex-col">
+                      {isAnalyzing ? (
+                        <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                          <div className="relative">
+                            <div className="w-16 h-16 border-4 border-cyber-green/20 border-t-cyber-green rounded-full animate-spin" />
+                            <Brain className="w-6 h-6 text-cyber-green absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+                          </div>
+                          <div className="text-[10px] font-mono text-cyber-green uppercase tracking-widest animate-pulse">
+                            Synthesizing Threat Vectors...
+                          </div>
+                        </div>
+                      ) : aiAnalysis ? (
+                        <motion.div 
+                          initial={{ opacity: 0 }} 
+                          animate={{ opacity: 1 }}
+                          className="text-sm text-gray-300 font-mono leading-relaxed whitespace-pre-wrap"
+                        >
+                          {aiAnalysis}
+                        </motion.div>
+                      ) : (
+                        <div className="flex-1 flex flex-col items-center justify-center text-center space-y-4 opacity-50">
+                          <Brain className="w-16 h-16 text-gray-600" />
+                          <p className="text-xs font-mono text-gray-500 max-w-sm">
+                            Initiate the Neural Threat Analysis to evaluate the password's resistance to modern cracking techniques, including mask attacks and AI-driven guessing.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </motion.div>
@@ -444,13 +621,14 @@ export default function PasswordLab() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                     {[
                       { label: 'Consumer PC', speed: '100M H/s', time: bruteForceTimes.consumer, icon: Cpu, color: 'text-blue-400' },
                       { label: 'GPU Mining Rig', speed: '100B H/s', time: bruteForceTimes.gpu_rig, icon: Zap, color: 'text-amber-500' },
                       { label: 'Supercomputer', speed: '1Q H/s', time: bruteForceTimes.supercomputer, icon: Server, color: 'text-red-500' },
+                      { label: 'Quantum Array', speed: '1S H/s', time: bruteForceTimes.quantum, icon: Network, color: 'text-purple-500' },
                     ].map((item) => (
-                      <div key={item.label} className="p-6 bg-white/5 border border-white/5 rounded-2xl space-y-4 relative overflow-hidden group">
+                      <div key={item.label} className="p-6 bg-white/5 border border-white/5 rounded-2xl space-y-4 relative overflow-hidden group hover:border-white/20 transition-all">
                         <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                           <item.icon size={64} />
                         </div>
