@@ -1,9 +1,10 @@
 /* COPYRIGHT ALEN PEPA */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Shield, Target, Zap, AlertTriangle, Terminal, 
   Play, Pause, RotateCcw, ChevronRight, CheckCircle2,
-  Lock, Globe, Cpu, Activity, Bug
+  Lock, Globe, Cpu, Activity, Bug, Server, Database,
+  Wifi, HardDrive, Network, Unlock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -88,12 +89,22 @@ export default function CyberRange() {
   const [stats, setStats] = useState({
     confidence: 0,
     successRate: 0,
-    stealth: 'STABLE'
+    stealth: 'STABLE',
+    payloadSize: '0 KB',
+    encryptionRate: '0 MB/s',
+    exfilSpeed: '0 Mbps'
   });
 
   useEffect(() => {
     setSteps(activeScenario.steps.map(s => ({ ...s, status: 'pending', logs: [] })));
-    setStats({ confidence: 0, successRate: 0, stealth: 'STABLE' });
+    setStats({ 
+      confidence: 0, 
+      successRate: 0, 
+      stealth: 'STABLE',
+      payloadSize: '0 KB',
+      encryptionRate: '0 MB/s',
+      exfilSpeed: '0 Mbps'
+    });
   }, [activeScenario]);
 
   const runSimulation = async () => {
@@ -108,7 +119,10 @@ export default function CyberRange() {
       setStats({
         confidence: Math.floor(85 + Math.random() * 10),
         successRate: Math.floor(70 + (i / steps.length) * 25),
-        stealth: i > 2 ? 'CRITICAL' : 'STABLE'
+        stealth: i > 2 ? 'CRITICAL' : i > 1 ? 'WARNING' : 'STABLE',
+        payloadSize: i > 0 ? `${(Math.random() * 5 + 1).toFixed(2)} MB` : '0 KB',
+        encryptionRate: activeScenario.id === 'ransomware' && i > 1 ? `${(Math.random() * 50 + 20).toFixed(1)} MB/s` : '0 MB/s',
+        exfilSpeed: (activeScenario.id === 'apt' || activeScenario.id === 'insider') && i > 2 ? `${(Math.random() * 100 + 50).toFixed(1)} Mbps` : '0 Mbps'
       });
 
       // Simulate AI-generated logs for each step
@@ -263,7 +277,14 @@ export default function CyberRange() {
     setIsSimulating(false);
     setCurrentStepIndex(0);
     setSteps(activeScenario.steps.map(s => ({ ...s, status: 'pending', logs: [] })));
-    setStats({ confidence: 0, successRate: 0, stealth: 'STABLE' });
+    setStats({ 
+      confidence: 0, 
+      successRate: 0, 
+      stealth: 'STABLE',
+      payloadSize: '0 KB',
+      encryptionRate: '0 MB/s',
+      exfilSpeed: '0 Mbps'
+    });
   };
 
   const outputEndRef = React.useRef<HTMLDivElement>(null);
@@ -346,33 +367,43 @@ export default function CyberRange() {
             <div 
               key={step.id}
               className={cn(
-                "p-3 rounded-lg border transition-all",
+                "p-3 rounded-lg border transition-all relative overflow-hidden",
                 i === currentStepIndex && isSimulating 
-                  ? 'bg-red-500/5 border-red-500/30 shadow-[0_0_10px_rgba(239,68,68,0.05)]' 
+                  ? 'bg-red-500/10 border-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
                   : step.status === 'completed'
-                  ? 'bg-emerald-500/5 border-emerald-500/20'
+                  ? 'bg-emerald-500/10 border-emerald-500/30'
                   : 'bg-[#151515] border-[#222]'
               )}
             >
-              <div className="flex items-center justify-between mb-1">
+              {i === currentStepIndex && isSimulating && (
+                <motion.div 
+                  className="absolute inset-0 bg-gradient-to-r from-transparent via-red-500/20 to-transparent"
+                  animate={{ x: ['-100%', '100%'] }}
+                  transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}
+                />
+              )}
+              <div className="flex items-center justify-between mb-1 relative z-10">
                 <span className="text-[10px] font-mono text-[#555]">STEP 0{i + 1}</span>
                 {step.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-emerald-500" />}
-                {step.status === 'running' && <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                {step.status === 'running' && <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />}
               </div>
               <h3 className={cn(
-                "text-xs font-bold",
+                "text-xs font-bold relative z-10",
                 i === currentStepIndex ? 'text-white' : 'text-[#888]'
               )}>
                 {step.title}
               </h3>
-              <p className="text-[9px] text-[#555] mt-1 leading-tight">{step.description}</p>
+              <p className="text-[9px] text-[#555] mt-1 leading-tight relative z-10">{step.description}</p>
             </div>
           ))}
         </div>
 
-        {/* Log Viewer */}
-        <div className="flex-1 flex flex-col bg-black p-6 font-mono overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
+        {/* Log Viewer & Target System */}
+        <div className="flex-1 flex flex-col bg-black p-6 font-mono overflow-hidden relative">
+          {/* Cyber Grid Background */}
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#333_1px,transparent_1px),linear-gradient(to_bottom,#333_1px,transparent_1px)] bg-[size:20px_20px] opacity-[0.03] pointer-events-none" />
+          
+          <div className="flex items-center justify-between mb-4 relative z-10">
             <div className="flex items-center gap-2 text-[#555]">
               <Terminal className="w-4 h-4" />
               <span className="text-[10px] uppercase tracking-widest">Simulation Log Output</span>
@@ -385,47 +416,116 @@ export default function CyberRange() {
             )}
           </div>
           
-          <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
-            {steps.flatMap(s => s.logs).length === 0 && (
-              <div className="h-full flex flex-col items-center justify-center text-[#222]">
-                <Bug className="w-12 h-12 mb-4 opacity-20" />
-                <p className="text-[10px] uppercase tracking-[0.3em]">Awaiting simulation initialization...</p>
+          <div className="flex-1 flex gap-6 overflow-hidden relative z-10">
+            {/* Logs */}
+            <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar pr-2">
+              {steps.flatMap(s => s.logs).length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-[#222]">
+                  <Bug className="w-12 h-12 mb-4 opacity-20" />
+                  <p className="text-[10px] uppercase tracking-[0.3em]">Awaiting simulation initialization...</p>
+                </div>
+              )}
+              
+              {steps.map((step, i) => (
+                <div key={i} className="space-y-1">
+                  {step.logs.map((log, j) => (
+                    <motion.div 
+                      key={j}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className="flex gap-3 text-[11px] group"
+                    >
+                      <span className="text-[#333] shrink-0 group-hover:text-[#555] transition-colors">[{new Date().toLocaleTimeString()}]</span>
+                      <span className={cn(
+                        "transition-colors",
+                        log.includes('SUCCESS') ? 'text-emerald-500 drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]' :
+                        log.includes('ERROR') ? 'text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]' :
+                        log.includes('WARN') ? 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]' : 'text-blue-400 drop-shadow-[0_0_5px_rgba(96,165,250,0.5)]'
+                      )}>
+                        {log}
+                      </span>
+                    </motion.div>
+                  ))}
+                </div>
+              ))}
+              
+              {isSimulating && (
+                <div className="flex gap-2 text-[11px] text-red-500 animate-pulse mt-2">
+                  <span>_</span>
+                  <span className="uppercase tracking-widest">Processing attack vector...</span>
+                </div>
+              )}
+              <div ref={outputEndRef} />
+            </div>
+
+            {/* Target System Visualizer */}
+            <div className="w-64 hidden lg:flex flex-col gap-4">
+              <div className="p-4 bg-[#111] border border-[#222] rounded-xl flex-1 flex flex-col relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 opacity-50" />
+                <h4 className="text-[9px] font-mono text-[#555] uppercase tracking-widest mb-4">Target Infrastructure</h4>
+                
+                <div className="flex-1 flex flex-col gap-3 justify-center">
+                  {/* Firewall */}
+                  <div className={cn(
+                    "p-3 rounded-lg border flex items-center justify-between transition-all",
+                    currentStepIndex > 0 || (currentStepIndex === 0 && steps[0]?.status === 'completed')
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Shield className="w-4 h-4" />
+                      <span className="text-[10px] uppercase">Edge Firewall</span>
+                    </div>
+                    {currentStepIndex > 0 ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                  </div>
+
+                  {/* Web Server */}
+                  <div className={cn(
+                    "p-3 rounded-lg border flex items-center justify-between transition-all",
+                    currentStepIndex > 1 || (currentStepIndex === 1 && steps[1]?.status === 'completed')
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Server className="w-4 h-4" />
+                      <span className="text-[10px] uppercase">Web Server</span>
+                    </div>
+                    <Activity className={cn("w-3 h-3", currentStepIndex > 1 && "animate-pulse")} />
+                  </div>
+
+                  {/* Internal Network */}
+                  <div className={cn(
+                    "p-3 rounded-lg border flex items-center justify-between transition-all",
+                    currentStepIndex > 2 || (currentStepIndex === 2 && steps[2]?.status === 'completed')
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Network className="w-4 h-4" />
+                      <span className="text-[10px] uppercase">Internal Network</span>
+                    </div>
+                    <Wifi className="w-3 h-3" />
+                  </div>
+
+                  {/* Database */}
+                  <div className={cn(
+                    "p-3 rounded-lg border flex items-center justify-between transition-all",
+                    currentStepIndex > 3 || (currentStepIndex === 3 && steps[3]?.status === 'completed')
+                      ? "bg-red-500/10 border-red-500/30 text-red-400"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Database className="w-4 h-4" />
+                      <span className="text-[10px] uppercase">Core Database</span>
+                    </div>
+                    <HardDrive className="w-3 h-3" />
+                  </div>
+                </div>
               </div>
-            )}
-            
-            {steps.map((step, i) => (
-              <div key={i} className="space-y-1">
-                {step.logs.map((log, j) => (
-                  <motion.div 
-                    key={j}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    className="flex gap-3 text-[11px] group"
-                  >
-                    <span className="text-[#333] shrink-0 group-hover:text-[#555] transition-colors">[{new Date().toLocaleTimeString()}]</span>
-                    <span className={cn(
-                      "transition-colors",
-                      log.includes('SUCCESS') ? 'text-emerald-500' :
-                      log.includes('ERROR') ? 'text-red-500' :
-                      log.includes('WARN') ? 'text-amber-500' : 'text-blue-400'
-                    )}>
-                      {log}
-                    </span>
-                  </motion.div>
-                ))}
-              </div>
-            ))}
-            
-            {isSimulating && (
-              <div className="flex gap-2 text-[11px] text-red-500 animate-pulse">
-                <span>_</span>
-                <span className="uppercase tracking-widest">Processing attack vector...</span>
-              </div>
-            )}
-            <div ref={outputEndRef} />
+            </div>
           </div>
 
-          <div className="mt-4 pt-4 border-t border-[#222] grid grid-cols-3 gap-4">
+          <div className="mt-4 pt-4 border-t border-[#222] grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 relative z-10">
             <div className="p-3 bg-[#111] rounded-lg border border-[#222] group hover:border-blue-500/30 transition-colors">
               <div className="flex items-center gap-2 mb-1">
                 <Cpu className="w-3 h-3 text-blue-500" />
@@ -447,10 +547,33 @@ export default function CyberRange() {
               </div>
               <div className={cn(
                 "text-sm font-bold",
-                stats.stealth === 'CRITICAL' ? 'text-red-500' : stats.stealth === 'STABLE' && stats.confidence > 0 ? 'text-emerald-500' : 'text-white'
+                stats.stealth === 'CRITICAL' ? 'text-red-500 drop-shadow-[0_0_5px_rgba(239,68,68,0.5)]' : 
+                stats.stealth === 'WARNING' ? 'text-amber-500 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]' :
+                stats.stealth === 'STABLE' && stats.confidence > 0 ? 'text-emerald-500' : 'text-white'
               )}>
                 {stats.confidence > 0 ? stats.stealth : '---'}
               </div>
+            </div>
+            <div className="p-3 bg-[#111] rounded-lg border border-[#222] group hover:border-purple-500/30 transition-colors hidden md:block">
+              <div className="flex items-center gap-2 mb-1">
+                <Bug className="w-3 h-3 text-purple-500" />
+                <span className="text-[9px] text-[#555] uppercase">Payload Size</span>
+              </div>
+              <div className="text-sm font-bold text-white">{stats.payloadSize}</div>
+            </div>
+            <div className="p-3 bg-[#111] rounded-lg border border-[#222] group hover:border-cyan-500/30 transition-colors hidden lg:block">
+              <div className="flex items-center gap-2 mb-1">
+                <Lock className="w-3 h-3 text-cyan-500" />
+                <span className="text-[9px] text-[#555] uppercase">Encrypt Rate</span>
+              </div>
+              <div className="text-sm font-bold text-white">{stats.encryptionRate}</div>
+            </div>
+            <div className="p-3 bg-[#111] rounded-lg border border-[#222] group hover:border-red-500/30 transition-colors hidden lg:block">
+              <div className="flex items-center gap-2 mb-1">
+                <Globe className="w-3 h-3 text-red-500" />
+                <span className="text-[9px] text-[#555] uppercase">Exfil Speed</span>
+              </div>
+              <div className="text-sm font-bold text-white">{stats.exfilSpeed}</div>
             </div>
           </div>
         </div>
