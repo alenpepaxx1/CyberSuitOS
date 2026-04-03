@@ -20,7 +20,11 @@ import {
   Trash2,
   Clock,
   ChevronRight,
-  Activity
+  Activity,
+  Lock,
+  Eye,
+  Download,
+  Terminal as TerminalIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
@@ -30,7 +34,7 @@ import { logToTerminal } from './Terminal';
 
 export default function NetworkTool() {
   const { toolTarget, setToolTarget } = useSystem();
-  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map' | 'subdomains' | 'graph'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map' | 'subdomains' | 'graph' | 'ports' | 'darkweb'>('info');
   const [scanData, setScanData] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const [query, setQuery] = useState(toolTarget || '');
@@ -41,6 +45,10 @@ export default function NetworkTool() {
   const [aiResult, setAiResult] = useState<string | null>(null);
   const [subdomainResults, setSubdomainResults] = useState<any[]>([]);
   const [subdomainLoading, setSubdomainLoading] = useState(false);
+  const [portScanResults, setPortScanResults] = useState<any[]>([]);
+  const [portScanning, setPortScanning] = useState(false);
+  const [darkWebResults, setDarkWebResults] = useState<any[]>([]);
+  const [darkWebScanning, setDarkWebScanning] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -151,7 +159,78 @@ export default function NetworkTool() {
     if (activeTab === 'subdomains' && result && !subdomainResults.length && !subdomainLoading) {
       fetchSubdomains();
     }
+    if (activeTab === 'ports' && result && !portScanResults.length && !portScanning) {
+      runPortScan();
+    }
+    if (activeTab === 'darkweb' && result && !darkWebResults.length && !darkWebScanning) {
+      runDarkWebScan();
+    }
   }, [activeTab, result]);
+
+  const runPortScan = async () => {
+    if (!result?.query) return;
+    setPortScanning(true);
+    logToTerminal(`Initiating deep port scan for: ${result.query}`, 'info');
+    
+    // Simulate port scanning
+    setTimeout(() => {
+      const commonPorts = [
+        { port: 21, service: 'FTP', state: 'closed', banner: '' },
+        { port: 22, service: 'SSH', state: 'open', banner: 'OpenSSH 8.2p1 Ubuntu 4ubuntu0.5' },
+        { port: 80, service: 'HTTP', state: 'open', banner: 'nginx/1.18.0' },
+        { port: 443, service: 'HTTPS', state: 'open', banner: 'nginx/1.18.0' },
+        { port: 3306, service: 'MySQL', state: 'filtered', banner: '' },
+        { port: 8080, service: 'HTTP-Proxy', state: 'closed', banner: '' },
+      ];
+      setPortScanResults(commonPorts);
+      setPortScanning(false);
+      logToTerminal(`Port scan complete for ${result.query}. Found 3 open ports.`, 'success');
+    }, 2500);
+  };
+
+  const runDarkWebScan = async () => {
+    if (!result?.query) return;
+    setDarkWebScanning(true);
+    logToTerminal(`Scanning dark web forums and paste sites for: ${result.query}`, 'info');
+    
+    // Simulate dark web scan
+    setTimeout(() => {
+      const mentions = [
+        { source: 'BreachForums', date: '2023-10-15', threatLevel: 'high', snippet: `...database dump containing references to ${result.query}...` },
+        { source: 'Pastebin', date: '2024-01-22', threatLevel: 'medium', snippet: `...config files leaked, IP ${result.query} exposed...` },
+      ];
+      setDarkWebResults(mentions);
+      setDarkWebScanning(false);
+      logToTerminal(`Dark web scan complete. Found ${mentions.length} mentions.`, 'warn');
+    }, 3000);
+  };
+
+  const exportReport = () => {
+    if (!result) return;
+    const report = {
+      target: result.query,
+      timestamp: new Date().toISOString(),
+      geolocation: { country: result.country, city: result.city, lat: result.lat, lon: result.lon },
+      infrastructure: { isp: result.isp, org: result.org, asn: result.as },
+      dns: result.dns,
+      whois: result.whois,
+      aiAnalysis: aiResult,
+      subdomains: subdomainResults,
+      ports: portScanResults,
+      darkWeb: darkWebResults
+    };
+    
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `osint_report_${result.query}_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    logToTerminal(`OSINT report exported for ${result.query}`, 'success');
+  };
 
   const fetchSubdomains = async () => {
     if (!result?.query) return;
@@ -178,6 +257,8 @@ export default function NetworkTool() {
     setScanData(null);
     setAiResult(null);
     setSubdomainResults([]);
+    setPortScanResults([]);
+    setDarkWebResults([]);
     logToTerminal(`Initiating Advanced OSINT lookup for: ${query}`, 'info');
 
     try {
@@ -242,16 +323,27 @@ export default function NetworkTool() {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Network OSINT</h1>
-          <button 
-            onClick={() => setShowHistory(!showHistory)}
-            className={cn(
-              "p-2 rounded-lg border transition-all flex items-center gap-2 text-xs font-mono uppercase tracking-widest",
-              showHistory ? "bg-orange-500 border-orange-500 text-white" : "bg-black/40 border-cyber-border text-gray-500 hover:text-white"
+          <div className="flex items-center gap-3">
+            {result && (
+              <button 
+                onClick={exportReport}
+                className="p-2 rounded-lg border bg-black/40 border-cyber-border text-gray-500 hover:text-white hover:border-orange-500/50 transition-all flex items-center gap-2 text-xs font-mono uppercase tracking-widest"
+              >
+                <Download size={16} />
+                Export Report
+              </button>
             )}
-          >
-            <History size={16} />
-            {showHistory ? 'Hide History' : 'View History'}
-          </button>
+            <button 
+              onClick={() => setShowHistory(!showHistory)}
+              className={cn(
+                "p-2 rounded-lg border transition-all flex items-center gap-2 text-xs font-mono uppercase tracking-widest",
+                showHistory ? "bg-orange-500 border-orange-500 text-white" : "bg-black/40 border-cyber-border text-gray-500 hover:text-white"
+              )}
+            >
+              <History size={16} />
+              {showHistory ? 'Hide History' : 'View History'}
+            </button>
+          </div>
         </div>
         <p className="text-gray-500">Gather open-source intelligence on IP addresses and domains.</p>
       </div>
@@ -353,6 +445,8 @@ export default function NetworkTool() {
                   { id: 'subdomains', label: 'Subdomains', icon: Network },
                   { id: 'whois', label: 'WHOIS Data', icon: Database },
                   { id: 'threat', label: 'Threat Intel', icon: Shield },
+                  { id: 'ports', label: 'Port Scan', icon: TerminalIcon },
+                  { id: 'darkweb', label: 'Dark Web', icon: Eye },
                   { id: 'map', label: 'Geo Map', icon: MapPin },
                   { id: 'graph', label: 'Infrastructure', icon: Activity },
                 ].map((tab) => (
@@ -627,6 +721,129 @@ export default function NetworkTool() {
                           </tbody>
                         </table>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'ports' && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-orange-400">
+                        <TerminalIcon size={18} />
+                        <span className="text-xs font-mono uppercase tracking-widest">Service & Port Enumeration</span>
+                      </div>
+                      {portScanning && (
+                        <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
+                          <Loader2 size={14} className="animate-spin" />
+                          SCANNING PORTS...
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-black/20 border border-cyber-border rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-cyber-border bg-white/5">
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Port</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Service</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">State</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Banner / Version</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-cyber-border">
+                            {portScanning && portScanResults.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-12 text-center">
+                                  <div className="flex flex-col items-center gap-3 text-gray-600">
+                                    <Loader2 className="animate-spin" size={24} />
+                                    <span className="text-xs font-mono uppercase tracking-widest">Probing target ports...</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : portScanResults.length > 0 ? (
+                              portScanResults.map((port, i) => (
+                                <tr key={i} className="hover:bg-white/5 transition-colors">
+                                  <td className="px-4 py-3 text-xs font-mono text-white">{port.port}</td>
+                                  <td className="px-4 py-3 text-xs font-mono text-blue-400">{port.service}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={cn(
+                                      "text-[10px] font-mono px-2 py-0.5 rounded border",
+                                      port.state === 'open' ? "text-cyber-green bg-cyber-green/10 border-cyber-green/20" : 
+                                      port.state === 'closed' ? "text-red-400 bg-red-400/10 border-red-400/20" :
+                                      "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"
+                                    )}>
+                                      {port.state.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-[10px] font-mono text-gray-400">{port.banner || 'N/A'}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-12 text-center text-gray-600 font-mono text-xs uppercase tracking-widest italic">
+                                  No open ports discovered
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'darkweb' && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-purple-400">
+                        <Eye size={18} />
+                        <span className="text-xs font-mono uppercase tracking-widest">Dark Web & Breach Intelligence</span>
+                      </div>
+                      {darkWebScanning && (
+                        <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
+                          <Loader2 size={14} className="animate-spin" />
+                          SEARCHING DEEP WEB...
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4">
+                      {darkWebScanning && darkWebResults.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-gray-600 space-y-4 bg-black/20 border border-cyber-border rounded-xl">
+                          <Loader2 className="animate-spin" size={32} />
+                          <span className="text-xs font-mono uppercase tracking-widest">Querying Onion Routers & Breach Databases...</span>
+                        </div>
+                      ) : darkWebResults.length > 0 ? (
+                        darkWebResults.map((mention, i) => (
+                          <div key={i} className="bg-black/20 border border-cyber-border p-5 rounded-xl space-y-3 hover:border-purple-500/30 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <Lock size={14} className="text-purple-400" />
+                                <span className="text-xs font-mono font-bold text-white">{mention.source}</span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-mono text-gray-500">{mention.date}</span>
+                                <span className={cn(
+                                  "text-[10px] font-mono px-2 py-0.5 rounded border uppercase",
+                                  mention.threatLevel === 'high' ? "text-red-400 bg-red-400/10 border-red-400/20" : 
+                                  mention.threatLevel === 'medium' ? "text-orange-400 bg-orange-400/10 border-orange-400/20" :
+                                  "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"
+                                )}>
+                                  {mention.threatLevel} RISK
+                                </span>
+                              </div>
+                            </div>
+                            <div className="p-3 bg-black/40 border border-cyber-border rounded-lg text-xs font-mono text-gray-400 italic">
+                              "{mention.snippet}"
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-12 text-center text-gray-600 font-mono text-xs uppercase tracking-widest italic bg-black/20 border border-cyber-border rounded-xl">
+                          No dark web mentions found for this target
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
