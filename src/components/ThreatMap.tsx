@@ -277,10 +277,14 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
           .attr('class', 'country-path')
           .style('transition', 'fill 0.5s, stroke 0.5s');
 
-        // 4. Draw Ripples
+        // 4. Draw Ripples (Initial only, dynamic ones handled separately)
         const rippleGroup = svg.append('g').attr('class', 'ripples');
         attacks.forEach(attack => {
-          const [x, y] = projection([attack.to.long, attack.to.lat])!;
+          const start = projection([attack.from.long, attack.from.lat]);
+          const end = projection([attack.to.long, attack.to.lat]);
+          if (!start || !end) return;
+          
+          const [x, y] = end;
           rippleGroup.append('circle')
             .attr('cx', x)
             .attr('cy', y)
@@ -372,8 +376,10 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
         const attackGroup = svg.append('g').attr('class', 'attacks');
 
         attacks.forEach((d, i) => {
-          const start = projection([d.from.long, d.from.lat])!;
-          const end = projection([d.to.long, d.to.lat])!;
+          const start = projection([d.from.long, d.from.lat]);
+          const end = projection([d.to.long, d.to.lat]);
+          if (!start || !end) return;
+          
           const dx = end[0] - start[0];
           const dy = end[1] - start[1];
           const dr = Math.sqrt(dx * dx + dy * dy);
@@ -457,6 +463,105 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
           }
         });
   }, [initialNodes, initialLines, mapData]);
+
+  // Dynamic attack lines rendering
+  useEffect(() => {
+    if (!svgRef.current || !mapData || !nodes.length) return;
+
+    const svg = d3.select(svgRef.current);
+    const projection = d3.geoMercator()
+      .scale(120)
+      .translate([800 / 2, 300 / 1.5]);
+
+    // Clear previous dynamic elements
+    svg.selectAll('.dynamic-attacks').remove();
+    svg.selectAll('.dynamic-ripples').remove();
+
+    const dynamicGroup = svg.append('g').attr('class', 'dynamic-attacks');
+    const rippleGroup = svg.append('g').attr('class', 'dynamic-ripples');
+
+    activeAttacks.forEach((attack, i) => {
+      if (!attack.from || !attack.to) return;
+      
+      const start = projection([attack.from.long, attack.from.lat]);
+      const end = projection([attack.to.long, attack.to.lat]);
+      
+      if (!start || !end) return;
+
+      // Draw Ripples
+      rippleGroup.append('circle')
+        .attr('cx', end[0])
+        .attr('cy', end[1])
+        .attr('r', 0)
+        .attr('fill', 'none')
+        .attr('stroke', '#ef4444')
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.8)
+        .append('animate')
+        .attr('attributeName', 'r')
+        .attr('from', '0')
+        .attr('to', '20')
+        .attr('dur', '2s')
+        .attr('repeatCount', 'indefinite');
+        
+      rippleGroup.append('circle')
+        .attr('cx', end[0])
+        .attr('cy', end[1])
+        .attr('r', 0)
+        .attr('fill', 'none')
+        .attr('stroke', '#ef4444')
+        .attr('stroke-width', 1)
+        .attr('opacity', 0.8)
+        .append('animate')
+        .attr('attributeName', 'opacity')
+        .attr('from', '0.8')
+        .attr('to', '0')
+        .attr('dur', '2s')
+        .attr('repeatCount', 'indefinite');
+
+      // Draw Attack Lines
+      const dx = end[0] - start[0];
+      const dy = end[1] - start[1];
+      const dr = Math.sqrt(dx * dx + dy * dy);
+      const pathId = `dynamic-attack-path-${i}-${attack.id || Math.random()}`;
+      const pathD = `M${start[0]},${start[1]}A${dr},${dr} 0 0,1 ${end[0]},${end[1]}`;
+
+      dynamicGroup.append('path')
+        .attr('id', pathId)
+        .attr('d', pathD)
+        .attr('fill', 'none')
+        .attr('stroke', '#ef4444')
+        .attr('stroke-width', 0.8)
+        .attr('stroke-dasharray', '4,4')
+        .attr('opacity', 0.5);
+
+      // The animated particle
+      const particle = dynamicGroup.append('circle')
+        .attr('r', 1.5)
+        .attr('fill', '#ef4444')
+        .style('filter', 'drop-shadow(0 0 3px #ef4444)');
+
+      particle.append('animateMotion')
+        .attr('dur', `${Math.random() * 1.5 + 1}s`)
+        .attr('repeatCount', 'indefinite')
+        .append('mpath')
+        .attr('xlink:href', `#${pathId}`);
+        
+      // Add a second, trailing particle
+      const particle2 = dynamicGroup.append('circle')
+        .attr('r', 1)
+        .attr('fill', '#ef4444')
+        .attr('opacity', 0.6);
+
+      particle2.append('animateMotion')
+        .attr('dur', `${Math.random() * 1.5 + 1}s`)
+        .attr('begin', '0.3s')
+        .attr('repeatCount', 'indefinite')
+        .append('mpath')
+        .attr('xlink:href', `#${pathId}`);
+    });
+
+  }, [activeAttacks, mapData, nodes]);
 
   // Dynamic country highlighting based on active attacks
   useEffect(() => {
@@ -546,6 +651,17 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
           {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
         </button>
       </div>
+
+      {/* Full Screen Close Button */}
+      {isFullScreen && (
+        <button 
+          onClick={toggleFullScreen}
+          className="absolute top-4 right-4 z-50 p-3 bg-red-500/20 backdrop-blur-md border border-red-500/50 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)]"
+          title="Close Full Screen"
+        >
+          <X size={24} />
+        </button>
+      )}
 
       {/* Live Attack Feed Overlay */}
       <div className="absolute top-4 left-4 z-20 w-64 pointer-events-none">
