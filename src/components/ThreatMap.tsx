@@ -43,25 +43,36 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
     
     const interval = setInterval(() => {
       setActiveAttacks(prev => {
-        // Occasionally add a new random "simulated" attack to keep it busy
-        if (Math.random() > 0.7 && prev.length < 40) {
-          const from = nodes[Math.floor(Math.random() * nodes.length)];
-          const to = nodes[Math.floor(Math.random() * nodes.length)];
-          if (from.id !== to.id) {
-            return [...prev, { from, to, isSimulated: true }];
+        // Add multiple new random "simulated" attacks to keep it very busy
+        const newAttacks = [];
+        const numToAdd = Math.floor(Math.random() * 3) + 1; // Add 1-3 attacks every second
+        
+        for (let i = 0; i < numToAdd; i++) {
+          if (prev.length + newAttacks.length < 60) {
+            const from = nodes[Math.floor(Math.random() * nodes.length)];
+            const to = nodes[Math.floor(Math.random() * nodes.length)];
+            if (from.id !== to.id) {
+              newAttacks.push({ from, to, isSimulated: true, id: Math.random().toString(36).substr(2, 9) });
+            }
           }
         }
-        // Occasionally remove a simulated attack
-        if (Math.random() > 0.8 && prev.length > 15) {
-          const simulatedIndices = prev.map((a, i) => a.isSimulated ? i : -1).filter(i => i !== -1);
-          if (simulatedIndices.length > 0) {
-            const indexToRemove = simulatedIndices[Math.floor(Math.random() * simulatedIndices.length)];
-            return prev.filter((_, i) => i !== indexToRemove);
+        
+        let updated = [...prev, ...newAttacks];
+
+        // Remove multiple simulated attacks to maintain turnover
+        if (updated.length > 25) {
+          const simulatedIndices = updated.map((a, i) => a.isSimulated ? i : -1).filter(i => i !== -1);
+          const numToRemove = Math.min(simulatedIndices.length, Math.floor(Math.random() * 2) + 1);
+          
+          for (let i = 0; i < numToRemove; i++) {
+            const indexToRemove = Math.floor(Math.random() * simulatedIndices.length);
+            updated.splice(simulatedIndices[indexToRemove], 1);
+            simulatedIndices.splice(indexToRemove, 1);
           }
         }
-        return prev;
+        return updated;
       });
-    }, 1000); // Update every second
+    }, 800); // Update slightly faster than every second
 
     return () => clearInterval(interval);
   }, [nodes]);
@@ -145,6 +156,16 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
             { long: 12.4964, lat: 41.9028, city: 'Rome', country: 'Italy' },
             { long: -70.6483, lat: -33.4489, city: 'Santiago', country: 'Chile' },
             { long: 55.2708, lat: 25.2048, city: 'Dubai', country: 'UAE' },
+            { long: 31.2357, lat: 30.0444, city: 'Cairo', country: 'Egypt' },
+            { long: 121.4737, lat: 31.2304, city: 'Shanghai', country: 'China' },
+            { long: -99.1332, lat: 19.4326, city: 'Mexico City', country: 'Mexico' },
+            { long: 100.5018, lat: 13.7563, city: 'Bangkok', country: 'Thailand' },
+            { long: 28.9784, lat: 41.0082, city: 'Istanbul', country: 'Turkey' },
+            { long: 67.0011, lat: 24.8607, city: 'Karachi', country: 'Pakistan' },
+            { long: -58.3816, lat: -34.6037, city: 'Buenos Aires', country: 'Argentina' },
+            { long: 120.9842, lat: 14.5995, city: 'Manila', country: 'Philippines' },
+            { long: 3.3792, lat: 6.5244, city: 'Lagos', country: 'Nigeria' },
+            { long: 106.8456, lat: -6.2088, city: 'Jakarta', country: 'Indonesia' },
           ];
 
           generatedNodes = locations.map((loc, i) => {
@@ -173,7 +194,7 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
             return from && to ? { from, to } : null;
           }).filter(Boolean);
         } else if (generatedNodes.length > 0) {
-          attacks = Array.from({ length: 30 }, () => ({
+          attacks = Array.from({ length: 50 }, () => ({
             from: generatedNodes[Math.floor(Math.random() * generatedNodes.length)],
             to: generatedNodes[Math.floor(Math.random() * generatedNodes.length)]
           })).filter(a => a.from && a.to && a.from.id !== a.to.id);
