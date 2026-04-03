@@ -39,6 +39,8 @@ export default function NetworkTool() {
   const [error, setError] = useState('');
   const [aiScanning, setAiScanning] = useState(false);
   const [aiResult, setAiResult] = useState<string | null>(null);
+  const [subdomainResults, setSubdomainResults] = useState<any[]>([]);
+  const [subdomainLoading, setSubdomainLoading] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -145,6 +147,28 @@ export default function NetworkTool() {
     }
   };
 
+  useEffect(() => {
+    if (activeTab === 'subdomains' && result && !subdomainResults.length && !subdomainLoading) {
+      fetchSubdomains();
+    }
+  }, [activeTab, result]);
+
+  const fetchSubdomains = async () => {
+    if (!result?.query) return;
+    setSubdomainLoading(true);
+    logToTerminal(`Enumerating subdomains for: ${result.query}`, 'info');
+    try {
+      const res = await fetch(`/api/tools/subdomains?target=${result.query}`);
+      const data = await res.json();
+      setSubdomainResults(data);
+      logToTerminal(`Discovered ${data.length} subdomains for ${result.query}`, 'success');
+    } catch (err) {
+      logToTerminal(`Subdomain enumeration failed: ${err}`, 'error');
+    } finally {
+      setSubdomainLoading(false);
+    }
+  };
+
   const lookupIP = async () => {
     if (!query) return;
     setLoading(true);
@@ -153,6 +177,7 @@ export default function NetworkTool() {
     setResult(null);
     setScanData(null);
     setAiResult(null);
+    setSubdomainResults([]);
     logToTerminal(`Initiating Advanced OSINT lookup for: ${query}`, 'info');
 
     try {
@@ -526,30 +551,82 @@ export default function NetworkTool() {
                 )}
 
                 {activeTab === 'subdomains' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <Network className="text-orange-400" size={18} />
-                      <h3 className="text-sm font-mono font-bold text-white uppercase">Discovered Subdomains</h3>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {result.subdomains?.map((sub: string, i: number) => (
-                        <div key={i} className="p-3 bg-white/5 border border-white/10 rounded-lg flex items-center justify-between group hover:border-orange-500/30 transition-all">
-                          <span className="text-xs font-mono text-gray-300">{sub}</span>
-                          <button 
-                            onClick={() => {
-                              setQuery(sub);
-                              lookupIP();
-                            }}
-                            className="text-[10px] font-mono text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            [RE-SCAN]
-                          </button>
-                        </div>
-                      )) || (
-                        <div className="col-span-2 py-8 text-center text-gray-500 font-mono text-xs">
-                          No subdomains discovered. Try a root domain.
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-orange-400">
+                        <Network size={18} />
+                        <span className="text-xs font-mono uppercase tracking-widest">Subdomain Enumeration</span>
+                      </div>
+                      {subdomainLoading && (
+                        <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
+                          <Loader2 size={14} className="animate-spin" />
+                          SCANNING...
                         </div>
                       )}
+                    </div>
+
+                    <div className="bg-black/20 border border-cyber-border rounded-xl overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-cyber-border bg-white/5">
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Subdomain</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">IP Address</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Status</th>
+                              <th className="px-4 py-3 text-[10px] font-mono text-gray-500 uppercase tracking-widest">Last Seen</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-cyber-border">
+                            {subdomainLoading && subdomainResults.length === 0 ? (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-12 text-center">
+                                  <div className="flex flex-col items-center gap-3 text-gray-600">
+                                    <Loader2 className="animate-spin" size={24} />
+                                    <span className="text-xs font-mono uppercase tracking-widest">Enumerating Infrastructure...</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ) : subdomainResults.length > 0 ? (
+                              subdomainResults.map((sub, i) => (
+                                <tr key={i} className="hover:bg-white/5 transition-colors group">
+                                  <td className="px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-mono text-white">{sub.subdomain}</span>
+                                      <button 
+                                        onClick={() => {
+                                          setQuery(sub.subdomain);
+                                          lookupIP();
+                                        }}
+                                        className="text-[10px] font-mono text-orange-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      >
+                                        [SCAN]
+                                      </button>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3 text-xs font-mono text-gray-400">{sub.ip}</td>
+                                  <td className="px-4 py-3">
+                                    <span className={cn(
+                                      "text-[10px] font-mono px-2 py-0.5 rounded border",
+                                      sub.status === 'up' ? "text-cyber-green bg-cyber-green/10 border-cyber-green/20" : "text-red-400 bg-red-400/10 border-red-400/20"
+                                    )}>
+                                      {sub.status.toUpperCase()}
+                                    </span>
+                                  </td>
+                                  <td className="px-4 py-3 text-[10px] font-mono text-gray-500">
+                                    {sub.last_seen ? new Date(sub.last_seen).toLocaleString() : 'N/A'}
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={4} className="px-4 py-12 text-center text-gray-600 font-mono text-xs uppercase tracking-widest italic">
+                                  No subdomains discovered for this target
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 )}
