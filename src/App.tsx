@@ -79,6 +79,27 @@ function MainContent() {
   const [booting, setBooting] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showForceStart, setShowForceStart] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (booting || !isAuthReady) {
+        setShowForceStart(true);
+      }
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [booting, isAuthReady]);
+
+  const handleForceStart = () => {
+    setBooting(false);
+    // We can't directly set isAuthReady in SystemContext from here, 
+    // but we can bypass the check in this component.
+    // However, the check is (booting || !isAuthReady).
+    // So if we set booting to false, it still needs isAuthReady to be true.
+    // Let's add a local bypass state.
+  };
+
+  const [bypassLoading, setBypassLoading] = useState(false);
   const [isLauncherOpen, setIsLauncherOpen] = useState(false);
 
   const handleNavigate = (toolId: string, target?: string) => {
@@ -162,7 +183,7 @@ function MainContent() {
     }
   };
 
-  if (booting || !isAuthReady) {
+  if ((booting || !isAuthReady) && !bypassLoading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center font-mono relative overflow-hidden">
         <div className="cyber-grid opacity-20" />
@@ -199,6 +220,17 @@ function MainContent() {
               className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
             />
           </div>
+
+          {showForceStart && (
+            <motion.button
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              onClick={() => setBypassLoading(true)}
+              className="mt-4 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-500 uppercase tracking-widest hover:bg-emerald-500/20 transition-all"
+            >
+              Force System Start
+            </motion.button>
+          )}
         </motion.div>
       </div>
     );
