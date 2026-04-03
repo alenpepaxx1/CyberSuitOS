@@ -113,7 +113,7 @@ async function startServer() {
       // Fetch News
       const newsResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: "Generate a list of 6 current global cybersecurity threat intelligence updates from the last 24-48 hours. Return a JSON array of objects with 'title', 'summary', 'severity' (low, medium, high, critical), 'timestamp', 'source', and 'link' (real URL).",
+        contents: "Generate a list of 8-10 of the ABSOLUTE LATEST global cybersecurity threat intelligence updates from the last 12-24 hours. Focus on real-time incidents, new vulnerability disclosures, and active state-sponsored campaigns. Scrape and aggregate from sources like The Hacker News, BleepingComputer, Krebs on Security, CISA Alerts, and major security vendor blogs (CrowdStrike, Mandiant, Palo Alto Networks). Return a JSON array of objects with 'title', 'summary', 'severity' (low, medium, high, critical), 'timestamp', 'source', and 'link' (real URL).",
         config: { 
           responseMimeType: "application/json",
           tools: [{ googleSearch: {} }]
