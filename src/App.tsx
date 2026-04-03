@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { cn } from '@/src/lib/utils';
 import { 
   Shield, 
+  ShieldCheck,
   Lock, 
   Hash, 
   Globe, 
@@ -67,7 +68,11 @@ function MainContent() {
     showScanlines,
     showGrid,
     userName,
-    clearanceLevel
+    clearanceLevel,
+    user,
+    isAuthReady,
+    login,
+    logout
   } = useSystem();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isAnalystOpen, setIsAnalystOpen] = useState(false);
@@ -157,7 +162,7 @@ function MainContent() {
     }
   };
 
-  if (booting) {
+  if (booting || !isAuthReady) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center font-mono relative overflow-hidden">
         <div className="cyber-grid opacity-20" />
@@ -180,7 +185,7 @@ function MainContent() {
           <div className="space-y-2 text-center">
             <h1 className="text-2xl font-bold text-white tracking-[0.3em] uppercase">CyberSuite OS</h1>
             <div className="flex items-center gap-2 text-emerald-500/60 text-[10px] uppercase tracking-widest">
-              <span className="animate-pulse">Initializing Kernel</span>
+              <span className="animate-pulse">{booting ? "Initializing Kernel" : "Authenticating"}</span>
               <span className="w-12 h-[1px] bg-emerald-500/20" />
               <span>v4.2.0-stable</span>
             </div>
@@ -364,9 +369,21 @@ function MainContent() {
                 <div className="text-xs font-bold text-white">{userName}</div>
                 <div className="text-[10px] text-emerald-500/60 font-mono">Level {clearanceLevel} Clearance</div>
               </div>
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-500/20">
-                {userName.substring(0, 2).toUpperCase()}
-              </div>
+              {user ? (
+                <button 
+                  onClick={logout}
+                  className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-500/20 hover:scale-105 transition-transform"
+                >
+                  {userName.substring(0, 2).toUpperCase()}
+                </button>
+              ) : (
+                <button 
+                  onClick={login}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold text-xs uppercase tracking-widest hover:bg-emerald-400 transition-colors"
+                >
+                  Login
+                </button>
+              )}
             </div>
           </div>
         </header>
