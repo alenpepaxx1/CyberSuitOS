@@ -77,14 +77,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [tickerIndex, setTickerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  const TICKER_MESSAGES = [
-    "CRITICAL: Zero-day exploit detected in major CDN provider",
-    "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
-    "INFO: New ransomware strain 'CyberLock' identified by AI core",
-    "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
-    "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
-    "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
-  ];
+  const TICKER_MESSAGES = threatNews.length > 0 
+    ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+    : [
+        "CRITICAL: Zero-day exploit detected in major CDN provider",
+        "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+        "INFO: New ransomware strain 'CyberLock' identified by AI core",
+        "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+        "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+        "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+      ];
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [systemLoad, setSystemLoad] = useState(42);
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -161,7 +163,19 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const logInterval = setInterval(fetchRealLogs, 4000);
 
     const tickerInterval = setInterval(() => {
-      setTickerIndex((prev) => (prev + 1) % TICKER_MESSAGES.length);
+      setTickerIndex((prev) => {
+        const messages = threatNews.length > 0 
+          ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+          : [
+              "CRITICAL: Zero-day exploit detected in major CDN provider",
+              "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+              "INFO: New ransomware strain 'CyberLock' identified by AI core",
+              "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+              "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+              "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+            ];
+        return (prev + 1) % messages.length;
+      });
     }, 5000);
 
     return () => {
@@ -170,7 +184,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       clearInterval(logInterval);
       clearInterval(tickerInterval);
     };
-  }, [isPaused]);
+  }, [isPaused, threatNews]);
 
   return (
     <div className="space-y-6 p-6 bg-[#050505] min-h-full rounded-2xl border border-[#222] cyber-grid">
