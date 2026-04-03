@@ -179,12 +179,47 @@
 }
 
 .cyber-card {
-  @apply bg-[#0d0d0d] border border-white/5 relative overflow-hidden transition-all duration-300;
-  background-image: radial-gradient(circle at 50% 0%, rgba(0, 255, 65, 0.03) 0%, transparent 70%);
+  @apply bg-[#0d0d0d] border border-white/5 relative overflow-hidden transition-all duration-500;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(0, 255, 65, 0.05) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.5);
+}
+
+.cyber-card::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+  background: linear-gradient(45deg, transparent, rgba(0, 255, 65, 0.03), transparent);
+}
+
+.cyber-card:hover::before {
+  @apply opacity-100;
 }
 
 .cyber-card:hover {
-  @apply border-cyber-green/20 shadow-[0_0_20px_rgba(0,255,65,0.05)];
+  @apply border-cyber-green/30 shadow-[0_0_30px_rgba(0,255,65,0.08)];
+  transform: translateY(-2px);
+}
+
+.glass-panel {
+  @apply bg-black/40 backdrop-blur-md border border-white/10 shadow-2xl;
+}
+
+.text-glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
 }
 
 .corner-accent {
