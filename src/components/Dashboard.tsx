@@ -1,5 +1,5 @@
 /* COPYRIGHT ALEN PEPA */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Shield, AlertTriangle, Activity, Globe, Zap, Lock, 
   Terminal, Server, Cpu, Database, Eye, RefreshCw,
@@ -76,117 +76,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [threatNews, setThreatNews] = useState<ThreatNews[]>([]);
   const [tickerIndex, setTickerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
-  const [systemLoad, setSystemLoad] = useState(42);
-  const [isPaused, setIsPaused] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
-  const [filter, setFilter] = useState<string>('all');
-  
-  // Use refs for values that shouldn't trigger interval resets
-  const threatNewsRef = useRef<ThreatNews[]>([]);
-  const isPausedRef = useRef(isPaused);
-
-  useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
-
-  const [logs, setLogs] = useState<LogEntry[]>([
-    { id: '1', time: new Date().toLocaleTimeString(), event: 'SSH Brute Force Attempt', source: '192.168.1.45', status: 'Blocked', severity: 'high' },
-    { id: '2', time: new Date().toLocaleTimeString(), event: 'SQL Injection Detected', source: '45.12.33.102', status: 'Mitigated', severity: 'critical' },
-    { id: '3', time: new Date().toLocaleTimeString(), event: 'Unauthorized API Access', source: '10.0.0.12', status: 'Logged', severity: 'medium' },
-  ]);
-
-  const fetchRealLogs = useCallback(async () => {
-    if (isPausedRef.current) return;
-    try {
-      // Mocking API call for now
-      const newLogs: LogEntry[] = [
-        { id: Math.random().toString(), time: new Date().toLocaleTimeString(), event: 'New Probe Detected', source: '172.16.0.5', status: 'Logged', severity: 'medium' }
-      ];
-      setLogs(prev => [...newLogs, ...prev].slice(0, 50));
-    } catch (e) {
-      console.error("Failed to fetch real logs:", e);
-    }
-  }, []);
-
-  const fetchThreatIntelligence = useCallback(async (isInitial = false) => {
-    if (isInitial) setIsLoading(true);
-    try {
-      // Mocking API call for now
-      const data = {
-        news: [
-          {
-            title: 'New Zero-Day Vulnerability in Popular Web Browser',
-            summary: 'A critical remote code execution vulnerability has been discovered in Chromium-based browsers. Users are advised to update immediately.',
-            severity: 'critical',
-            timestamp: '2 hours ago',
-            source: 'CyberSecurity Hub',
-            link: '#'
-          },
-          {
-            title: 'Major Ransomware Attack on Healthcare Provider',
-            summary: 'A large healthcare network has been hit by a sophisticated ransomware attack, disrupting patient services across multiple states.',
-            severity: 'high',
-            timestamp: '5 hours ago',
-            source: 'Threat Monitor',
-            link: '#'
-          }
-        ],
-        trends: ATTACK_TRENDS,
-        geo: GEOGRAPHIC_DATA,
-        mapNodes: [],
-        attackLines: []
-      };
-      
-      setThreatNews(data.news || []);
-      threatNewsRef.current = data.news || [];
-      if (data.trends?.length > 0) setAttackTrends(data.trends);
-      if (data.geo?.length > 0) setGeoData(data.geo);
-      setMapNodes(data.mapNodes || []);
-      setAttackLines(data.attackLines || []);
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Failed to fetch threat intelligence:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchThreatIntelligence(true);
-    
-    const intelInterval = setInterval(() => fetchThreatIntelligence(false), 60000);
-    
-    const loadInterval = setInterval(() => {
-      setSystemLoad(prev => Math.max(10, Math.min(95, prev + (Math.random() * 10 - 5))));
-    }, 5000);
-
-    const logInterval = setInterval(fetchRealLogs, 4000);
-
-    const tickerInterval = setInterval(() => {
-      setTickerIndex((prev) => {
-        const currentNews = threatNewsRef.current;
-        const messages = currentNews.length > 0 
-          ? currentNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
-          : [
-              "CRITICAL: Zero-day exploit detected in major CDN provider",
-              "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
-              "INFO: New ransomware strain 'CyberLock' identified by AI core",
-              "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
-              "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
-              "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
-            ];
-        return (prev + 1) % messages.length;
-      });
-    }, 5000);
-
-    return () => {
-      clearInterval(intelInterval);
-      clearInterval(loadInterval);
-      clearInterval(logInterval);
-      clearInterval(tickerInterval);
-    };
-  }, [fetchThreatIntelligence, fetchRealLogs]); // Removed threatNews and isPaused from dependencies to stop the loop
 
   const TICKER_MESSAGES = threatNews.length > 0 
     ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
@@ -198,6 +87,108 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
         "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
       ];
+  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
+  const [systemLoad, setSystemLoad] = useState(42);
+  const [logs, setLogs] = useState<LogEntry[]>([
+    { id: '1', time: new Date().toLocaleTimeString(), event: 'SSH Brute Force Attempt', source: '192.168.1.45', status: 'Blocked', severity: 'high' },
+    { id: '2', time: new Date().toLocaleTimeString(), event: 'SQL Injection Detected', source: '45.12.33.102', status: 'Mitigated', severity: 'critical' },
+    { id: '3', time: new Date().toLocaleTimeString(), event: 'Unauthorized API Access', source: '10.0.0.12', status: 'Logged', severity: 'medium' },
+  ]);
+  const [isPaused, setIsPaused] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
+  const [filter, setFilter] = useState<string>('all');
+
+  const fetchRealLogs = async () => {
+    if (isPaused) return;
+    try {
+      const res = await fetch('/api/logs');
+      const newLogs = await res.json();
+      setLogs(prev => [...newLogs, ...prev].slice(0, 50));
+    } catch (e) {
+      console.error("Failed to fetch real logs:", e);
+    }
+  };
+
+  const fetchThreatIntelligence = async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
+    try {
+      const response = await fetch('/api/threat-intel');
+      if (response.ok) {
+        const data = await response.json();
+        setThreatNews(data.news || []);
+        if (data.trends?.length > 0) setAttackTrends(data.trends);
+        if (data.geo?.length > 0) setGeoData(data.geo);
+        setMapNodes(data.mapNodes || []);
+        setAttackLines(data.attackLines || []);
+        setLastUpdated(new Date());
+      } else {
+        throw new Error('Backend threat intel failed');
+      }
+    } catch (error) {
+      console.error("Failed to fetch threat intelligence:", error);
+      // Ensure we have something to show even on error
+      setMapNodes([]);
+      setAttackLines([]);
+      const fallbackNews: ThreatNews[] = [
+        {
+          title: 'New Zero-Day Vulnerability in Popular Web Browser',
+          summary: 'A critical remote code execution vulnerability has been discovered in Chromium-based browsers. Users are advised to update immediately.',
+          severity: 'critical',
+          timestamp: '2 hours ago',
+          source: 'CyberSecurity Hub',
+          link: '#'
+        },
+        {
+          title: 'Major Ransomware Attack on Healthcare Provider',
+          summary: 'A large healthcare network has been hit by a sophisticated ransomware attack, disrupting patient services across multiple states.',
+          severity: 'high',
+          timestamp: '5 hours ago',
+          source: 'Threat Monitor',
+          link: '#'
+        }
+      ];
+      setThreatNews(fallbackNews);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchThreatIntelligence(true);
+    const interval = setInterval(() => fetchThreatIntelligence(false), 60000); // 1 min for real-time feel
+    return () => clearInterval(interval);
+  }, []); // Run once on mount
+
+  useEffect(() => {
+    const loadInterval = setInterval(() => {
+      setSystemLoad(prev => Math.max(10, Math.min(95, prev + (Math.random() * 10 - 5))));
+    }, 5000);
+    return () => clearInterval(loadInterval);
+  }, []);
+
+  useEffect(() => {
+    const logInterval = setInterval(fetchRealLogs, 4000);
+    return () => clearInterval(logInterval);
+  }, [isPaused]); // Only re-run if isPaused changes
+
+  useEffect(() => {
+    const tickerInterval = setInterval(() => {
+      setTickerIndex((prev) => {
+        const messages = threatNews.length > 0 
+          ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+          : [
+              "CRITICAL: Zero-day exploit detected in major CDN provider",
+              "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+              "INFO: New ransomware strain 'CyberLock' identified by AI core",
+              "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+              "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+              "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+            ];
+        return (prev + 1) % messages.length;
+      });
+    }, 5000);
+    return () => clearInterval(tickerInterval);
+  }, [threatNews]); // Only re-run if threatNews changes
 
   return (
     <div className="space-y-6 p-6 bg-[#050505] min-h-full rounded-2xl border border-[#222] cyber-grid">
@@ -232,8 +223,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <motion.div
                     key={i}
                     className="w-1 bg-cyber-green/40 rounded-t-sm"
-                    animate={{ height: [`${h}%`, `${Math.max(20, Math.min(100, h + (Math.random() * 20 - 10)))}%`, `${h}%`] }}
-                    transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.2 }}
+                    animate={{ height: [`${h}%`, `${(h + 40) % 100}%`, `${h}%`] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.1 }}
                   />
                 ))}
               </div>
@@ -295,7 +286,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             key={i}
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1, duration: 0.5 }}
+            transition={{ delay: i * 0.1 }}
             className="cyber-card p-5 rounded-xl group relative overflow-hidden transition-all hover:border-white/20"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -525,7 +516,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                       key={i} 
                       className="w-1.5 h-3 bg-cyber-green/40 rounded-sm"
                       animate={{ opacity: [0.2, 1, 0.2] }}
-                      transition={{ duration: 2, repeat: Infinity, delay: i * 0.1 }}
+                      transition={{ duration: 1, repeat: Infinity, delay: i * 0.1 }}
                     />
                   ))}
                 </div>
