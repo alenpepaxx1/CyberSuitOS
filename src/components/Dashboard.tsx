@@ -206,7 +206,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
+          <div className="px-4 py-2 bg-black/60 border border-white/5 rounded-lg flex items-center gap-3 shadow-inner relative overflow-hidden group">
+            <div className="absolute inset-0 bg-cyber-green/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex flex-col items-end relative z-10">
+              <span className="text-[9px] font-mono text-gray-500 uppercase">System Integrity</span>
+              <span className="text-xs font-mono text-white font-bold tracking-widest">SECURE_v4.2</span>
+            </div>
+            <div className="w-12 h-8 relative z-10">
+              <div className="flex items-end gap-0.5 h-full">
+                {[40, 70, 45, 90, 60, 80].map((h, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-1 bg-cyber-green/40 rounded-t-sm"
+                    animate={{ height: [`${h}%`, `${Math.random() * 100}%`, `${h}%`] }}
+                    transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut", delay: i * 0.1 }}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="px-4 py-2 bg-black/60 border border-white/5 rounded-lg flex items-center gap-3 shadow-inner">
             <div className="flex flex-col items-end">
               <span className="text-[9px] font-mono text-gray-500 uppercase">System Load</span>
@@ -223,9 +243,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           </div>
           <button 
             onClick={() => fetchThreatIntelligence(false)}
-            className="p-2.5 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/20 rounded-lg text-cyber-green transition-all shadow-[0_0_10px_rgba(0,255,65,0.1)]"
+            className="p-2.5 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/20 rounded-lg text-cyber-green transition-all shadow-[0_0_10px_rgba(0,255,65,0.1)] group"
           >
-            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw size={18} className={cn("group-hover:rotate-180 transition-transform duration-500", isLoading ? 'animate-spin' : '')} />
           </button>
         </div>
       </div>
@@ -263,8 +283,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.1 }}
-            className="cyber-card p-5 rounded-xl group"
+            className="cyber-card p-5 rounded-xl group relative overflow-hidden transition-all hover:border-white/20"
           >
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="absolute inset-0 pointer-events-none opacity-[0.03] group-hover:opacity-[0.07] transition-opacity">
+              <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_2px,3px_100%]" />
+            </div>
             <div className="corner-accent corner-tl" />
             <div className="corner-accent corner-br" />
             <div className="flex justify-between items-start mb-4">
@@ -475,11 +499,27 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               </div>
             </div>
           </div>
-          <div className="flex-1 min-h-[400px] relative bg-black/20">
+          <div className="flex-1 min-h-[450px] relative bg-black/20">
             <ThreatMap onAction={onNavigate} initialNodes={mapNodes} initialLines={attackLines} />
             
             {/* Map HUD Overlay */}
-            <div className="absolute bottom-4 right-4 pointer-events-none flex flex-col gap-2">
+            <div className="absolute top-4 left-4 pointer-events-none flex flex-col gap-2 z-10">
+              <div className="bg-black/60 backdrop-blur-md border border-white/10 p-2 rounded-lg flex flex-col gap-1">
+                <div className="text-[8px] font-mono text-gray-500 uppercase">Topology Density</div>
+                <div className="flex gap-0.5">
+                  {Array.from({ length: 12 }).map((_, i) => (
+                    <motion.div 
+                      key={i} 
+                      className="w-1.5 h-3 bg-cyber-green/40 rounded-sm"
+                      animate={{ opacity: [0.2, 1, 0.2] }}
+                      transition={{ duration: 1, repeat: Infinity, delay: i * 0.1 }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="absolute bottom-4 right-4 pointer-events-none flex flex-col gap-2 z-10">
               <div className="bg-black/80 backdrop-blur-md border border-white/10 p-3 rounded-lg flex items-center gap-4">
                 <div className="flex flex-col">
                   <span className="text-[8px] font-mono text-gray-500 uppercase">Global Latency</span>
@@ -489,6 +529,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="flex flex-col">
                   <span className="text-[8px] font-mono text-gray-500 uppercase">Traffic Flow</span>
                   <span className="text-xs font-mono text-blue-400 font-bold">1.2 GB/s</span>
+                </div>
+                <div className="w-px h-6 bg-white/10" />
+                <div className="flex flex-col">
+                  <span className="text-[8px] font-mono text-gray-500 uppercase">Active Nodes</span>
+                  <span className="text-xs font-mono text-white font-bold">{mapNodes?.length || 0}</span>
                 </div>
               </div>
             </div>
