@@ -71,7 +71,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const { stats, firewallEnabled, vpnEnabled, userName, clearanceLevel } = useSystem();
   const [attackTrends, setAttackTrends] = useState(ATTACK_TRENDS);
   const [geoData, setGeoData] = useState(GEOGRAPHIC_DATA);
-  const [mapNodes, setMapNodes] = useState<any[]>([]);
+  const [mapNodes, setMapNodes] = useState<any[] | undefined>(undefined);
+  const [attackLines, setAttackLines] = useState<any[]>([]);
   const [threatNews, setThreatNews] = useState<ThreatNews[]>([]);
   const [tickerIndex, setTickerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
@@ -106,8 +107,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   };
 
-  const fetchThreatIntelligence = async () => {
-    setIsLoading(true);
+  const fetchThreatIntelligence = async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
       const response = await fetch('/api/threat-intel');
       if (response.ok) {
@@ -115,13 +116,17 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         setThreatNews(data.news || []);
         if (data.trends?.length > 0) setAttackTrends(data.trends);
         if (data.geo?.length > 0) setGeoData(data.geo);
-        if (data.mapNodes?.length > 0) setMapNodes(data.mapNodes);
+        setMapNodes(data.mapNodes || []);
+        setAttackLines(data.attackLines || []);
         setLastUpdated(new Date());
       } else {
         throw new Error('Backend threat intel failed');
       }
     } catch (error) {
       console.error("Failed to fetch threat intelligence:", error);
+      // Ensure we have something to show even on error
+      setMapNodes([]);
+      setAttackLines([]);
       const fallbackNews: ThreatNews[] = [
         {
           title: 'New Zero-Day Vulnerability in Popular Web Browser',
@@ -147,8 +152,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   };
 
   useEffect(() => {
-    fetchThreatIntelligence();
-    const interval = setInterval(fetchThreatIntelligence, 300000); // 5 mins
+    fetchThreatIntelligence(true);
+    const interval = setInterval(() => fetchThreatIntelligence(false), 60000); // 1 min for real-time feel
     const loadInterval = setInterval(() => {
       setSystemLoad(prev => Math.max(10, Math.min(95, prev + (Math.random() * 10 - 5))));
     }, 5000);
@@ -203,7 +208,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </div>
           <button 
-            onClick={fetchThreatIntelligence}
+            onClick={() => fetchThreatIntelligence(false)}
             className="p-2.5 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/20 rounded-lg text-cyber-green transition-all shadow-[0_0_10px_rgba(0,255,65,0.1)]"
           >
             <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
@@ -457,7 +462,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
           </div>
           <div className="flex-1 min-h-[400px] relative bg-black/20">
-            <ThreatMap onAction={onNavigate} initialNodes={mapNodes} />
+            <ThreatMap onAction={onNavigate} initialNodes={mapNodes} initialLines={attackLines} />
             
             {/* Map HUD Overlay */}
             <div className="absolute bottom-4 right-4 pointer-events-none flex flex-col gap-2">
