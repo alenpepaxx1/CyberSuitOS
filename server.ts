@@ -18,54 +18,56 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  const fallbackThreatIntel = {
+    news: [
+      {
+        title: 'New Zero-Day Vulnerability in Popular Web Browser',
+        summary: 'A critical remote code execution vulnerability has been discovered in Chromium-based browsers. Users are advised to update immediately.',
+        severity: 'critical',
+        timestamp: '2 hours ago',
+        source: 'CyberSecurity Hub',
+        link: '#'
+      },
+      {
+        title: 'Major Ransomware Attack on Healthcare Provider',
+        summary: 'A large healthcare network has been hit by a sophisticated ransomware attack, disrupting patient services across multiple states.',
+        severity: 'high',
+        timestamp: '5 hours ago',
+        source: 'Threat Monitor',
+        link: '#'
+      },
+      {
+        title: 'Supply Chain Attack Targets Software Developers',
+        summary: 'Malicious packages have been found in popular package managers, targeting developers with credential-stealing malware.',
+        severity: 'high',
+        timestamp: '8 hours ago',
+        source: 'DevSecOps Daily',
+        link: '#'
+      }
+    ],
+    trends: [
+      { time: '00:00', attacks: 45, blocked: 42 },
+      { time: '04:00', attacks: 32, blocked: 31 },
+      { time: '08:00', attacks: 68, blocked: 65 },
+      { time: '12:00', attacks: 124, blocked: 120 },
+      { time: '16:00', attacks: 85, blocked: 82 },
+      { time: '20:00', attacks: 156, blocked: 150 },
+      { time: '23:59', attacks: 92, blocked: 89 },
+    ],
+    geo: [
+      { name: 'North America', value: 45, color: '#3b82f6' },
+      { name: 'Europe', value: 30, color: '#10b981' },
+      { name: 'Asia', value: 15, color: '#f59e0b' },
+      { name: 'Other', value: 10, color: '#ef4444' },
+    ],
+    mapNodes: []
+  };
+
   app.get("/api/threat-intel", async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey || apiKey === 'undefined' || apiKey === '') {
-      return res.json({
-        news: [
-          {
-            title: 'New Zero-Day Vulnerability in Popular Web Browser',
-            summary: 'A critical remote code execution vulnerability has been discovered in Chromium-based browsers. Users are advised to update immediately.',
-            severity: 'critical',
-            timestamp: '2 hours ago',
-            source: 'CyberSecurity Hub',
-            link: '#'
-          },
-          {
-            title: 'Major Ransomware Attack on Healthcare Provider',
-            summary: 'A large healthcare network has been hit by a sophisticated ransomware attack, disrupting patient services across multiple states.',
-            severity: 'high',
-            timestamp: '5 hours ago',
-            source: 'Threat Monitor',
-            link: '#'
-          },
-          {
-            title: 'Supply Chain Attack Targets Software Developers',
-            summary: 'Malicious packages have been found in popular package managers, targeting developers with credential-stealing malware.',
-            severity: 'high',
-            timestamp: '8 hours ago',
-            source: 'DevSecOps Daily',
-            link: '#'
-          }
-        ],
-        trends: [
-          { time: '00:00', attacks: 45, blocked: 42 },
-          { time: '04:00', attacks: 32, blocked: 31 },
-          { time: '08:00', attacks: 68, blocked: 65 },
-          { time: '12:00', attacks: 124, blocked: 120 },
-          { time: '16:00', attacks: 85, blocked: 82 },
-          { time: '20:00', attacks: 156, blocked: 150 },
-          { time: '23:59', attacks: 92, blocked: 89 },
-        ],
-        geo: [
-          { name: 'North America', value: 45, color: '#3b82f6' },
-          { name: 'Europe', value: 30, color: '#10b981' },
-          { name: 'Asia', value: 15, color: '#f59e0b' },
-          { name: 'Other', value: 10, color: '#ef4444' },
-        ],
-        mapNodes: []
-      });
+      return res.json(fallbackThreatIntel);
     }
 
     try {
@@ -106,7 +108,8 @@ async function startServer() {
       });
     } catch (error) {
       console.error("Failed to fetch threat intelligence:", error);
-      res.status(500).json({ error: "Failed to fetch threat intelligence" });
+      // Return fallback data instead of 500 error
+      res.json(fallbackThreatIntel);
     }
   });
 
