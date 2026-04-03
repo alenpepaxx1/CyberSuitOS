@@ -77,7 +77,20 @@ async function startServer() {
       { name: 'Asia', value: 15, color: '#f59e0b' },
       { name: 'Other', value: 10, color: '#ef4444' },
     ],
-    mapNodes: []
+    mapNodes: [
+      { id: 'f-1', long: -74.006, lat: 40.7128, city: 'New York', country: 'USA', type: 'node', threatLevel: 'low', status: 'secure', ip: '192.168.1.1' },
+      { id: 'f-2', long: 37.6173, lat: 55.7558, city: 'Moscow', country: 'Russia', type: 'attack', threatLevel: 'high', status: 'active', ip: '95.161.22.4', attackType: 'APT28 Intrusion' },
+      { id: 'f-3', long: 116.4074, lat: 39.9042, city: 'Beijing', country: 'China', type: 'attack', threatLevel: 'critical', status: 'active', ip: '221.232.12.7', attackType: 'Volt Typhoon Probe' },
+      { id: 'f-4', long: 126.978, lat: 37.5665, city: 'Seoul', country: 'South Korea', type: 'node', threatLevel: 'medium', status: 'active', ip: '211.234.55.12' },
+      { id: 'f-5', long: 139.6503, lat: 35.6762, city: 'Tokyo', country: 'Japan', type: 'node', threatLevel: 'low', status: 'secure', ip: '133.1.2.5' },
+      { id: 'f-6', long: 0.1278, lat: 51.5074, city: 'London', country: 'UK', type: 'node', threatLevel: 'low', status: 'secure', ip: '81.2.3.4' },
+      { id: 'f-7', long: 2.3522, lat: 48.8566, city: 'Paris', country: 'France', type: 'node', threatLevel: 'medium', status: 'active', ip: '37.1.2.3' },
+    ],
+    attackLines: [
+      { fromId: 'f-2', toId: 'f-1' },
+      { fromId: 'f-3', toId: 'f-4' },
+      { fromId: 'f-3', toId: 'f-1' },
+    ]
   };
 
   const isValidApiKey = (key: string | undefined): boolean => {
@@ -112,12 +125,14 @@ async function startServer() {
       const trendsResponse = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: `Analyze current global cyber attack trends for the last 24 hours. 
-        Scrape and aggregate data from reliable cybersecurity sources (e.g., Check Point, Kaspersky, FireEye, SANS ISC).
+        Scrape and aggregate data from reliable cybersecurity sources (e.g., Check Point, Kaspersky, FireEye, SANS ISC, Cisco Talos).
         Return a JSON object with:
         1. 'trends': an array of EXACTLY 24 objects, one for each hour of the last 24 hours, with 'time' (HH:00) and 'attacks' (number representing global volume), 'blocked' (number representing mitigated volume).
         2. 'geo': an array of 4 objects with 'name' (Region), 'value' (percentage of total attacks), 'color' (hex).
-        3. 'mapNodes': an array of 10 objects with 'long', 'lat', 'city', 'country', 'type' ('attack'|'node'), 'threatLevel', 'ip', 'attackType'.
-        Ensure the data reflects real-world hourly fluctuations and current global hotspots.`,
+        3. 'mapNodes': an array of 50-70 objects representing 100% REAL current cyber attack events, state-sponsored activities, or known malicious infrastructure active RIGHT NOW. 
+           Each object MUST have: 'id', 'long', 'lat', 'city', 'country', 'type' ('attack'|'node'), 'threatLevel' ('low'|'medium'|'high'|'critical'), 'ip' (REAL known malicious IP if possible), 'attackType' (e.g., 'APT28 Intrusion', 'Lazarus Group C2', 'Volt Typhoon Probe'), 'status' ('active'|'compromised'|'secure').
+        4. 'attackLines': an array of 30-50 objects with 'fromId' and 'toId' referencing the 'id's in 'mapNodes', representing real-time traffic or attack flows observed between specific geographical locations.
+        Ensure the data reflects real-world geopolitical tensions and current global hotspots.`,
         config: { 
           responseMimeType: "application/json",
           tools: [{ googleSearch: {} }]
@@ -129,7 +144,8 @@ async function startServer() {
         news: newsData,
         trends: trendsData.trends || [],
         geo: trendsData.geo || [],
-        mapNodes: trendsData.mapNodes || []
+        mapNodes: trendsData.mapNodes || [],
+        attackLines: trendsData.attackLines || []
       });
     } catch (error: any) {
       const errorMessage = error?.message || String(error);
