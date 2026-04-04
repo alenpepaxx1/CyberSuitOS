@@ -4,9 +4,11 @@ import {
   Mail, ShieldAlert, Send, Copy, RefreshCw, 
   Eye, Terminal, Sparkles, AlertTriangle, CheckCircle2,
   Lock, Smartphone, Phone, QrCode, Target, BarChart3,
-  Search, MousePointer2, Info, X, ChevronRight, Brain, Link2, FileWarning
+  Search, MousePointer2, Info, X, ChevronRight, Brain, Link2, FileWarning,
+  User, ShieldCheck, Zap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 
@@ -51,53 +53,51 @@ export default function PhishingSimulator() {
     setActiveTab('preview');
     
     try {
+      const vectorSpecificInstructions = {
+        'credential-harvesting': 'Focus on a fake login page or security alert asking for credentials. Use realistic corporate branding.',
+        'malware-delivery': 'Focus on a "mandatory" software update or an "important" document attachment. Describe the file name and type (e.g., invoice.pdf.exe).',
+        'bec': 'Focus on a high-pressure request from an executive (CEO/CFO) for a wire transfer or sensitive data. Use a professional, slightly hurried tone.',
+        'smishing': 'Generate a short, urgent SMS message with a suspicious shortened link.',
+        'vishing': 'Generate a script for a fraudulent phone call, including the caller ID name and the transcript of the automated or live voice.',
+        'qr-phishing': 'Generate a scenario where a QR code is used (e.g., a "Scan to pay" or "Scan for menu" at a corporate cafeteria). Describe the physical context.',
+        'spear-phishing': 'Tailor the content specifically to an individual\'s role or a recent project at the target company.',
+        'whaling': 'Create a high-stakes legal or financial threat targeting a C-level executive.'
+      };
+
       const prompt = `Generate a highly realistic, advanced, and sophisticated phishing campaign for a corporate security training simulation.
       Target Context/Company: ${target}
       Campaign Type: ${type}
       Difficulty Level: ${difficulty}
       
+      Vector Specific Context: ${vectorSpecificInstructions[type as keyof typeof vectorSpecificInstructions]}
+      
       Return a JSON object with:
       1. 'subject': The email subject line (or SMS/Call title). Make it highly convincing.
-      2. 'content': The main content (HTML for email, Text for SMS/Call). Use realistic corporate language, formatting, and urgency.
-      3. 'redFlags': An array of objects {id, description, location} explaining subtle signs of phishing (e.g., mismatched domains, slight urgency, unusual requests).
-      4. 'psychologicalTriggers': An array of strings describing the psychological manipulation tactics used (e.g., 'Urgency', 'Authority', 'Fear of Missing Out').
-      5. 'phishScore': A rating from 1-100 of how effective and deceptive this attack would be.
-      6. 'metrics': Simulated success metrics including 'clickRate', 'reportRate', 'compromiseRate' (percentages) and 'deptBreakdown' (array of {dept, rate}).
+      2. 'content': The main content. 
+         - For Email: Use HTML with realistic corporate language.
+         - For SMS: Use short text with a link.
+         - For Voice: Provide a transcript of the call.
+         - For QR: Describe the context and provide the text/URL the QR points to.
+      3. 'redFlags': An array of objects {id, description, location} explaining subtle signs of phishing.
+      4. 'psychologicalTriggers': An array of strings describing the tactics (e.g., 'Urgency', 'Authority').
+      5. 'phishScore': A rating from 1-100.
+      6. 'metrics': Simulated success metrics including 'clickRate', 'reportRate', 'compromiseRate' and 'deptBreakdown'.
       
-      Make it extremely sophisticated, tailored to the target context, and difficult to spot for the specified difficulty level.`;
+      Make it extremely sophisticated and tailored to the target context.`;
 
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          config: {
-            responseMimeType: "application/json",
-            systemInstruction: "You are a CyberSuite OS Advanced Phishing Simulation Expert. Generate highly realistic, safe, and educational phishing content for corporate training. Emulate advanced persistent threat (APT) tactics. Do not generate actual malicious links or malware.",
-          }
-        })
+      const resData = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: "application/json",
+          systemInstruction: "You are a CyberSuite OS Advanced Phishing Simulation Expert. Generate highly realistic, safe, and educational phishing content for corporate training. Emulate advanced persistent threat (APT) tactics. Do not generate actual malicious links or malware. Your output must be valid JSON.",
+        }
       });
 
-      if (!response.ok) {
-        throw new Error(`AI Generation failed with status: ${response.status}`);
-      }
-
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const textBody = await response.text();
-        console.error('Expected JSON but received:', textBody.substring(0, 100));
-        throw new Error('Server returned non-JSON response (likely an error page)');
-      }
-
-      const resData = await response.json();
       let text = resData.text || '{}';
       
-      // Strip markdown code blocks if present
       if (text.includes('```')) {
         const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-        if (match && match[1]) {
-          text = match[1];
-        }
+        if (match && match[1]) text = match[1];
       }
       
       const data = JSON.parse(text);
@@ -121,31 +121,89 @@ export default function PhishingSimulator() {
     } catch (error) {
       console.error("Failed to generate campaign, using local engine:", error);
       
-      // Fallback Engine
+      // Vector-specific Fallback Engine
+      const getFallbackData = () => {
+        switch(type) {
+          case 'smishing':
+            return {
+              subject: 'SMS Alert',
+              content: `[${target} Security] Unusual activity detected. Your account access is limited. Please verify your identity at: https://bit.ly/${target.toLowerCase().substring(0,3)}-verify-secure`,
+              redFlags: [
+                { id: '1', location: 'Link', description: 'Suspicious shortened URL (bit.ly) used for corporate verification.' },
+                { id: '2', location: 'Sender', description: 'Message sent from an unknown 10-digit number instead of a short code.' }
+              ],
+              phishScore: 82
+            };
+          case 'vishing':
+            return {
+              subject: 'Automated Security Call',
+              content: `This is an automated message from the ${target} IT Security Department. We have detected a potential breach of your workstation. To prevent data loss, please provide your employee ID and temporary password to the automated system now. Failure to comply will result in immediate account suspension.`,
+              redFlags: [
+                { id: '1', location: 'Request', description: 'Requesting sensitive credentials over an unsolicited phone call.' },
+                { id: '2', location: 'Tone', description: 'Aggressive and threatening tone used to bypass critical thinking.' }
+              ],
+              phishScore: 75
+            };
+          case 'qr-phishing':
+            return {
+              subject: 'Cafeteria Reward Program',
+              content: `Scan the QR code on the table to join the new ${target} Employee Rewards program and get 50% off your next meal! (Points to: https://rewards.${target.toLowerCase().replace(/\s+/g, '-')}.com.co/login)`,
+              redFlags: [
+                { id: '1', location: 'Domain', description: 'The domain ends in .com.co instead of the official corporate .com.' },
+                { id: '2', location: 'Context', description: 'QR codes in public spaces can easily be replaced by attackers.' }
+              ],
+              phishScore: 88
+            };
+          case 'malware-delivery':
+            return {
+              subject: `INTERNAL: Mandatory ${target} Security Patch v4.2.1`,
+              content: `
+                <div style="font-family: sans-serif; color: #333;">
+                  <p>All employees are required to install the latest security patch to comply with our updated data protection policy.</p>
+                  <p>Please download and run the attached installer: <strong>patch_installer_v421.exe</strong></p>
+                  <div style="background: #f5f5f5; padding: 15px; border-radius: 8px; border: 1px solid #ddd; margin: 20px 0;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                      <div style="width: 32px; height: 32px; background: #d32f2f; color: white; display: flex; align-items: center; justify-content: center; border-radius: 4px; font-weight: bold;">EXE</div>
+                      <div>
+                        <div style="font-size: 13px; font-weight: bold;">patch_installer_v421.exe</div>
+                        <div style="font-size: 11px; color: #666;">Size: 2.4 MB • Type: Application</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              `,
+              redFlags: [
+                { id: '1', location: 'Attachment', description: 'Directly sending an executable (.exe) file via email is a major security risk.' },
+                { id: '2', location: 'Policy', description: 'IT usually deploys patches automatically via MDM, not manual email attachments.' }
+              ],
+              phishScore: 91
+            };
+          default:
+            return {
+              subject: `[URGENT] Action Required: ${target} Security Update`,
+              content: `
+                <div style="font-family: sans-serif; color: #333; max-width: 600px;">
+                  <h2 style="color: #d32f2f;">Security Alert: Unauthorized Access Attempt</h2>
+                  <p>Dear Employee,</p>
+                  <p>Our security systems have detected an unusual login attempt to your <strong>${target}</strong> corporate account from an unrecognized location.</p>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="#" style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Verify Account Identity</a>
+                  </div>
+                  <p>Thank you,<br><strong>${target} Global IT Security Team</strong></p>
+                </div>
+              `,
+              redFlags: [
+                { id: '1', location: 'Sender Address', description: 'The email claims to be from IT Security but the domain might be slightly off.' },
+                { id: '2', location: 'Urgency', description: 'The message creates a false sense of panic.' }
+              ],
+              phishScore: 78
+            };
+        }
+      };
+
       const fallbackData = {
-        subject: `[URGENT] Action Required: ${target} Security Update`,
-        content: `
-          <div style="font-family: sans-serif; color: #333; max-width: 600px;">
-            <h2 style="color: #d32f2f;">Security Alert: Unauthorized Access Attempt</h2>
-            <p>Dear Employee,</p>
-            <p>Our security systems have detected an unusual login attempt to your <strong>${target}</strong> corporate account from an unrecognized location (IP: 103.45.21.99 - Moscow, RU).</p>
-            <p>As a precautionary measure, your account access has been temporarily restricted. To restore full access and verify your identity, please click the secure link below within the next 4 hours.</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <a href="#" style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Verify Account Identity</a>
-            </div>
-            <p style="font-size: 12px; color: #666;">If you do not complete this verification, your account will be permanently locked for security reasons.</p>
-            <p>Thank you,<br><strong>${target} Global IT Security Team</strong></p>
-            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="font-size: 10px; color: #999;">This is an automated message. Please do not reply to this email.</p>
-          </div>
-        `,
-        redFlags: [
-          { id: '1', location: 'Sender Address', description: 'The email claims to be from IT Security but the domain might be slightly off (e.g., internal-security.net instead of company.com).' },
-          { id: '2', location: 'Urgency', description: 'The message creates a false sense of panic by threatening to lock the account within 4 hours.' },
-          { id: '3', location: 'Link Destination', description: 'Hovering over the button reveals a suspicious URL that does not belong to the corporate domain.' }
-        ],
+        ...getFallbackData(),
         psychologicalTriggers: ['Urgency', 'Authority', 'Fear'],
-        phishScore: 78,
         metrics: {
           clickRate: 14.5,
           reportRate: 6.2,
@@ -167,7 +225,7 @@ export default function PhishingSimulator() {
         ...fallbackData
       });
       
-      logToTerminal("AI Core offline. Using Local Phishing Synthesis Engine.", "warn");
+      logToTerminal(`AI Core offline. Using Local ${type.toUpperCase()} Synthesis Engine.`, "warn");
     } finally {
       setIsLoading(false);
     }
@@ -225,19 +283,25 @@ export default function PhishingSimulator() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Configuration Sidebar */}
-        <div className="w-80 border-r border-white/5 p-6 space-y-8 bg-black/20 overflow-y-auto custom-scrollbar z-10">
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-gray-400">
-              <Target size={14} />
-              <label className="text-[10px] font-mono uppercase tracking-widest">Target Context</label>
+        <div className="w-80 border-r border-white/5 p-6 space-y-8 bg-black/40 backdrop-blur-xl overflow-y-auto custom-scrollbar z-10">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-gray-400">
+                <Target size={14} className="text-blue-400" />
+                <label className="text-[10px] font-mono uppercase tracking-widest">Target Profiler</label>
+              </div>
+              <div className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[8px] font-mono text-blue-400 uppercase">Active</div>
             </div>
-            <input 
-              type="text"
-              value={target}
-              onChange={(e) => setTarget(e.target.value)}
-              placeholder="e.g. Global Finance Corp"
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700"
-            />
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-xl blur opacity-0 group-hover:opacity-100 transition duration-500" />
+              <input 
+                type="text"
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+                placeholder="Target Organization Name..."
+                className="w-full bg-black/60 border border-white/10 rounded-xl px-4 py-3.5 text-xs text-white focus:border-blue-500/50 outline-none transition-all placeholder:text-gray-700 relative z-10"
+              />
+            </div>
           </div>
 
           <div className="space-y-4">
@@ -299,8 +363,9 @@ export default function PhishingSimulator() {
           <button
             onClick={generateCampaign}
             disabled={isLoading || !target}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-mono text-[11px] font-bold uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 group"
+            className="w-full py-4 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-mono text-[11px] font-bold uppercase tracking-[0.2em] shadow-2xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 group relative overflow-hidden"
           >
+            <div className="absolute inset-0 bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.1)_50%,transparent_75%)] bg-[length:250%_250%] animate-[shimmer_3s_infinite] pointer-events-none" />
             {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4 group-hover:rotate-12 transition-transform" />}
             {isLoading ? 'Synthesizing...' : 'Launch Simulation'}
           </button>
@@ -370,33 +435,113 @@ export default function PhishingSimulator() {
                             </div>
                           </div>
                           
+                          {/* Header Info (for Email types) */}
+                          {!(type === 'smishing' || type === 'vishing' || type === 'qr-phishing') && (
+                            <div className="bg-gray-50 border-b border-gray-200 p-4 space-y-2 text-[11px] font-sans text-gray-600">
+                              <div className="flex gap-4">
+                                <span className="w-12 font-bold text-gray-400">From:</span>
+                                <span className="flex items-center gap-1">
+                                  {target} IT Support <span className="text-blue-500">&lt;support@{target.toLowerCase().replace(/\s+/g, '-')}-internal.net&gt;</span>
+                                  <ShieldAlert size={12} className="text-amber-500 ml-1" />
+                                </span>
+                              </div>
+                              <div className="flex gap-4">
+                                <span className="w-12 font-bold text-gray-400">To:</span>
+                                <span>employee@your-company.com</span>
+                              </div>
+                              <div className="flex gap-4">
+                                <span className="w-12 font-bold text-gray-400">Date:</span>
+                                <span>{new Date().toLocaleString()}</span>
+                              </div>
+                              <div className="flex gap-4">
+                                <span className="w-12 font-bold text-gray-400">Subject:</span>
+                                <span className="font-bold text-gray-900">{campaign.subject}</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className={cn(
-                            "p-10 min-h-[500px] relative",
-                            (type === 'smishing' || type === 'vishing') ? "bg-[#0a0a0a] flex items-center justify-center" : "bg-white"
+                            "p-10 min-h-[500px] relative transition-all duration-500",
+                            (type === 'smishing' || type === 'vishing' || type === 'qr-phishing') ? "bg-[#0a0a0a] flex items-center justify-center" : "bg-white"
                           )}>
-                            {(type === 'smishing' || type === 'vishing') ? (
+                            {type === 'malware-delivery' && (
+                              <div className="absolute top-4 right-4 z-10">
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-full px-3 py-1 flex items-center gap-2 animate-pulse">
+                                  <FileWarning size={12} className="text-red-500" />
+                                  <span className="text-[10px] font-mono text-red-500 uppercase font-bold">Malicious Payload Detected</span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {(type === 'smishing' || type === 'vishing' || type === 'qr-phishing') ? (
                               <div className="w-72 bg-[#1c1c1e] rounded-[3rem] p-4 border-[6px] border-[#3a3a3c] shadow-2xl relative overflow-hidden">
                                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-[#3a3a3c] rounded-b-3xl z-20" />
                                 <div className="space-y-4 mt-8">
                                   {type === 'smishing' ? (
-                                    <div className="bg-[#2c2c2e] p-4 rounded-2xl rounded-tl-none text-white text-xs leading-relaxed">
-                                      {campaign.content}
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2 mb-4">
+                                        <div className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center">
+                                          <User size={14} className="text-gray-400" />
+                                        </div>
+                                        <div className="text-[10px] text-white font-medium">+1 (888) 234-9921</div>
+                                      </div>
+                                      <div className="bg-[#2c2c2e] p-4 rounded-2xl rounded-tl-none text-white text-xs leading-relaxed shadow-lg">
+                                        {campaign.content}
+                                      </div>
+                                      <div className="text-[9px] text-gray-500 font-mono ml-1">Delivered</div>
                                     </div>
-                                  ) : (
+                                  ) : type === 'vishing' ? (
                                     <div className="flex flex-col items-center justify-center py-12 space-y-6">
-                                      <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center animate-pulse">
-                                        <Phone className="w-10 h-10 text-red-500" />
+                                      <div className="relative">
+                                        <div className="w-20 h-20 bg-red-500/20 rounded-full flex items-center justify-center animate-pulse">
+                                          <Phone className="w-10 h-10 text-red-500" />
+                                        </div>
+                                        <div className="absolute -inset-4 border border-red-500/20 rounded-full animate-[ping_3s_linear_infinite]" />
                                       </div>
                                       <div className="text-center">
                                         <div className="text-white font-bold mb-1">Unknown Caller</div>
-                                        <div className="text-gray-400 text-xs">00:42</div>
+                                        <div className="text-red-500 text-[10px] font-mono animate-pulse uppercase tracking-widest">Incoming Call...</div>
                                       </div>
-                                      <div className="bg-[#2c2c2e] p-4 rounded-xl text-white text-xs leading-relaxed italic text-center w-full">
+                                      <div className="bg-[#2c2c2e]/50 backdrop-blur-md p-4 rounded-xl text-white text-[11px] leading-relaxed italic text-center w-full border border-white/5">
+                                        <div className="text-[8px] text-gray-500 uppercase mb-2 font-mono tracking-tighter">Transcript</div>
                                         "{campaign.content}"
+                                      </div>
+                                      <div className="flex gap-8 pt-4">
+                                        <div className="flex flex-col items-center gap-2">
+                                          <div className="w-12 h-12 bg-red-500 rounded-full flex items-center justify-center shadow-lg shadow-red-500/20">
+                                            <X size={20} className="text-white" />
+                                          </div>
+                                          <span className="text-[9px] text-gray-500 uppercase">Decline</span>
+                                        </div>
+                                        <div className="flex flex-col items-center gap-2">
+                                          <div className="w-12 h-12 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                            <Phone size={20} className="text-white" />
+                                          </div>
+                                          <span className="text-[9px] text-gray-500 uppercase">Accept</span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col items-center justify-center py-12 space-y-8">
+                                      <div className="text-center space-y-2">
+                                        <div className="text-white font-bold text-sm">Scan QR Code</div>
+                                        <div className="text-gray-400 text-[10px] uppercase tracking-widest font-mono">{target} Rewards</div>
+                                      </div>
+                                      <div className="p-4 bg-white rounded-3xl shadow-2xl relative group">
+                                        <div className="absolute inset-0 bg-blue-500/10 blur-xl opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        <img 
+                                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(campaign.content)}&color=050505&bgcolor=ffffff`}
+                                          alt="Phishing QR Code"
+                                          className="w-32 h-32 relative z-10"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      </div>
+                                      <div className="text-[10px] text-gray-500 text-center leading-relaxed px-4 italic">
+                                        "{campaign.content.substring(0, 60)}..."
                                       </div>
                                     </div>
                                   )}
-                                  <div className="text-[9px] text-center text-gray-500 font-mono">Today 10:42 AM</div>
+                                  <div className="text-[9px] text-center text-gray-500 font-mono mt-4">Today 10:42 AM</div>
                                 </div>
                               </div>
                             ) : (
@@ -569,13 +714,5 @@ export default function PhishingSimulator() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Zap({ size }: { size: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-    </svg>
   );
 }
