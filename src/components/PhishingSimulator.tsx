@@ -79,7 +79,14 @@ export default function PhishingSimulator() {
       });
 
       if (!response.ok) {
-        throw new Error('AI Generation failed');
+        throw new Error(`AI Generation failed with status: ${response.status}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const textBody = await response.text();
+        console.error('Expected JSON but received:', textBody.substring(0, 100));
+        throw new Error('Server returned non-JSON response (likely an error page)');
       }
 
       const resData = await response.json();
