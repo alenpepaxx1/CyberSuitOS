@@ -29,8 +29,8 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { useSystem } from '../contexts/SystemContext';
-
 import { logToTerminal } from './Terminal';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 
 export default function NetworkTool() {
   const { toolTarget, setToolTarget } = useSystem();
@@ -111,32 +111,23 @@ export default function NetworkTool() {
         `IP: ${result.query}, ISP: ${result.isp}, Org: ${result.org}, Country: ${result.country}, City: ${result.city}, Lat/Lon: ${result.lat}, ${result.lon}` : 
         `Target: ${query}`;
 
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `You are an autonomous cybersecurity scanner. Perform a deep analysis on the following target infrastructure context. Identify common vulnerabilities, misconfigurations, and potential attack vectors.
-          
-          Target Context: ${targetContext}
-          
-          Your report MUST include:
-          1. Infrastructure Risk Profile (Low/Medium/High/Critical)
-          2. Potential Vulnerabilities (Specific to the ISP/Org/Region if possible)
-          3. Misconfiguration Risks (e.g., DNS, Routing, Open Services)
-          4. Actionable Remediation Steps
-          5. Threat Intelligence Summary (Use real-time data if possible)` }] }],
-          config: {
-            systemInstruction: "You are a CyberSuite OS AI Security Scanner. Be technical, concise, and professional. Use markdown for formatting. Focus on realistic risks. If the target is a major cloud provider (Google, AWS, Azure), focus on shared responsibility model risks.",
-            tools: [{ googleSearch: {} }]
-          }
-        })
+      const data = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `You are an autonomous cybersecurity scanner. Perform a deep analysis on the following target infrastructure context. Identify common vulnerabilities, misconfigurations, and potential attack vectors.
+        
+        Target Context: ${targetContext}
+        
+        Your report MUST include:
+        1. Infrastructure Risk Profile (Low/Medium/High/Critical)
+        2. Potential Vulnerabilities (Specific to the ISP/Org/Region if possible)
+        3. Misconfiguration Risks (e.g., DNS, Routing, Open Services)
+        4. Actionable Remediation Steps
+        5. Threat Intelligence Summary (Use real-time data if possible)` }] }],
+        config: {
+          systemInstruction: "You are a CyberSuite OS AI Security Scanner. Be technical, concise, and professional. Use markdown for formatting. Focus on realistic risks. If the target is a major cloud provider (Google, AWS, Azure), focus on shared responsibility model risks.",
+          tools: [{ googleSearch: {} }]
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('AI Scan failed');
-      }
-
-      const data = await response.json();
       const text = data.text || 'No analysis available.';
       setAiResult(text);
       logToTerminal('AI Security Analysis completed successfully.', 'success');
