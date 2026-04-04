@@ -27,6 +27,7 @@ export default function Launcher({ isOpen, onClose, onSelect, activeTool }: Laun
     { id: 'payloads', name: 'Payload Lab', icon: Terminal, color: 'text-red-400', desc: 'Exploit development and payload obfuscation.' },
     { id: 'stego', name: 'Stego Lab', icon: Eye, color: 'text-pink-400', desc: 'Hidden data detection and extraction engine.' },
     { id: 'python-lab', name: 'Python Lab', icon: Code, color: 'text-yellow-400', desc: 'WASM-powered Python scripting environment for security automation.' },
+    { id: 'dorks', name: 'Dork Explorer', icon: Search, color: 'text-orange-400', desc: 'Advanced Google Dorking and OSINT search operator engine.' },
     { id: 'scanner', name: 'Vulnerability Scan', icon: Search, color: 'text-yellow-400', desc: 'Automated security auditing and AI reporting.' },
     { id: 'anonymous-chat', name: 'Anonymous System', icon: MessageSquare, color: 'text-cyan-400', desc: 'Secure, end-to-end encrypted communication.' },
     { id: 'settings', name: 'System Settings', icon: Settings, color: 'text-gray-400', desc: 'OS configuration and interface customization.' },
