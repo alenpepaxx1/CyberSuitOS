@@ -4,8 +4,6 @@
 
 # CyberSuite OS 🛡️
 
-![CyberSuite OS Banner](https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&q=80&w=1200&h=400)
-
 **CyberSuite OS** is a sophisticated, production-grade cybersecurity operations platform and educational suite. It provides a comprehensive set of tools for ethical hacking, vulnerability research, and security training, all wrapped in a high-performance, immersive "OS-style" interface.
 
 ## 🚀 Key Features
@@ -46,7 +44,7 @@
 
 1. **Clone the repository:**
    ```bash
-   git clone https://github.com/yourusername/cybersuite-os.git
+   git clone https://github.com/alenpepaxx1/CyberSuitOS.git
    cd cybersuite-os
    ```
 
@@ -62,7 +60,6 @@
 
 4. **Start the development server:**
    ```bash
-   npm install
    npm run dev
    ```
 
