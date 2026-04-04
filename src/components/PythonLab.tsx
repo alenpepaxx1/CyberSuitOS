@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { cn } from '@/src/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 import { 
   Play, 
   Terminal as TerminalIcon, 
@@ -187,23 +188,13 @@ export default function PythonLab() {
     setIsAnalyzing(true);
     logToTerminal("AI Analyst is reviewing your code...", "info");
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `Analyze this Python code for security vulnerabilities, performance issues, and best practices. Provide a concise summary with actionable advice.\n\nCode:\n${code}` }] }],
-          config: {
-            systemInstruction: "You are Alen, the CyberSuite OS AI Security Analyst. Be technical, concise, and professional. Use markdown for formatting.",
-          }
-        })
+      const data = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `Analyze this Python code for security vulnerabilities, performance issues, and best practices. Provide a concise summary with actionable advice.\n\nCode:\n${code}` }] }],
+        config: {
+          systemInstruction: "You are Alen, the CyberSuite OS AI Security Analyst. Be technical, concise, and professional. Use markdown for formatting.",
+        }
       });
-
-      if (!response.ok) {
-        throw new Error('AI analysis failed');
-      }
-
-      const data = await response.json();
-      setAiAnalysis(data.candidates?.[0]?.content?.parts?.[0]?.text || "No analysis available.");
+      setAiAnalysis(data.text || "No analysis available.");
       logToTerminal("AI Code Analysis complete.", "success");
     } catch (err) {
       console.error("AI Analysis failed:", err);
@@ -219,20 +210,13 @@ export default function PythonLab() {
     setIsGenerating(true);
     logToTerminal(`Neural Core generating Python script: "${aiPrompt}"...`, "info");
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `Write a Python script for the following request: ${aiPrompt}. Output ONLY the raw Python code, no markdown formatting, no explanation.` }] }],
-          config: {
-            systemInstruction: "You are a CyberSuite OS AI Python Developer. Output ONLY raw Python code. Do not use markdown code blocks (```).",
-          }
-        })
+      const data = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `Write a Python script for the following request: ${aiPrompt}. Output ONLY the raw Python code, no markdown formatting, no explanation.` }] }],
+        config: {
+          systemInstruction: "You are a CyberSuite OS AI Python Developer. Output ONLY raw Python code. Do not use markdown code blocks (```).",
+        }
       });
-
-      if (!response.ok) throw new Error('AI Generation failed');
-      const data = await response.json();
-      let newCode = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      let newCode = data.text || '';
       newCode = newCode.replace(/^```python\n/, '').replace(/^```\n/, '').replace(/```$/, '');
       setCode(newCode);
       setActiveScript('custom');
