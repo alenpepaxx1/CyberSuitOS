@@ -732,12 +732,16 @@ async function startServer() {
               res.on('end', () => resolve({ statusCode: res.statusCode, data }));
             });
             req.on('error', reject);
-            // crt.sh can be very slow, increase timeout to 15 seconds
-            req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
+            // crt.sh can be very slow, increase timeout to 30 seconds
+            req.setTimeout(30000, () => { 
+              req.destroy(); 
+              reject(new Error('Timeout after 30s')); 
+            });
           });
 
           if (crtResponse.statusCode === 200 && crtResponse.data) {
             const certs = JSON.parse(crtResponse.data);
+            console.log(`[Scanner] crt.sh returned ${certs.length} certificates for ${searchDomain}`);
             certs.forEach((cert: any) => {
               const nameValue = cert.name_value.toLowerCase();
               nameValue.split('\n').forEach((sub: string) => {
