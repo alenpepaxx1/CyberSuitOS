@@ -569,25 +569,59 @@ async function startServer() {
           return res.json([{ subdomain: hostname, ip: hostname, status: 'up', type: 'A' }]);
         }
 
+        let searchDomain = hostname;
+        if (searchDomain.startsWith('www.')) {
+          searchDomain = searchDomain.substring(4);
+        }
+
+        const foundSubdomains: any[] = [];
+        const uniqueSubs = new Set<string>();
+
+        // 1. Try crt.sh for accurate subdomains
+        try {
+          const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
+          const crtResponse: any = await new Promise((resolve, reject) => {
+            const req = https.get(crtUrl, (res) => {
+              let data = '';
+              res.on('data', chunk => data += chunk);
+              res.on('end', () => resolve({ statusCode: res.statusCode, data }));
+            });
+            req.on('error', reject);
+            req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
+          });
+
+          if (crtResponse.statusCode === 200 && crtResponse.data) {
+            const certs = JSON.parse(crtResponse.data);
+            certs.forEach((cert: any) => {
+              const nameValue = cert.name_value.toLowerCase();
+              nameValue.split('\n').forEach((sub: string) => {
+                if (!sub.includes('*') && sub.endsWith(searchDomain)) {
+                  uniqueSubs.add(sub);
+                }
+              });
+            });
+          }
+        } catch (e) {
+          console.error('crt.sh fetch failed:', e);
+        }
+
+        // 2. Add common subdomains to check
         const commonSubs = [
           'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
           'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
           'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
-          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
-          'git', 'svn', 'jenkins', 'jira', 'confluence', 'slack', 'mail2', 'webmail',
-          'smtp', 'pop', 'imap', 'ftp', 'ssh', 'db', 'sql', 'mysql', 'postgres', 'redis',
-          'elastic', 'kibana', 'grafana', 'prometheus', 'monitor', 'status', 'health',
-          'backup', 'old', 'new', 'v2', 'v3', 'api-docs', 'sandbox', 'payment', 'billing',
-          'm', 'mobile', 'autodiscover', 'cpanel', 'whm', 'webdisk', 'ns', 'ns3', 'ns4'
+          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff'
         ];
         
-        const foundSubdomains: any[] = [];
-        const batchSize = 15;
+        commonSubs.forEach(sub => uniqueSubs.add(`${sub}.${searchDomain}`));
+        uniqueSubs.add(searchDomain);
+
+        const subsToCheck = Array.from(uniqueSubs);
+        const batchSize = 20;
         
-        for (let i = 0; i < commonSubs.length; i += batchSize) {
-          const batch = commonSubs.slice(i, i + batchSize);
-          await Promise.all(batch.map(async (sub) => {
-            const domain = `${sub}.${hostname}`;
+        for (let i = 0; i < subsToCheck.length; i += batchSize) {
+          const batch = subsToCheck.slice(i, i + batchSize);
+          await Promise.all(batch.map(async (domain) => {
             try {
               const addrs = await dns.promises.resolve4(domain);
               if (addrs && addrs.length > 0) {
@@ -604,24 +638,18 @@ async function startServer() {
             }
           }));
           // Small delay between batches to avoid overwhelming DNS
-          if (i + batchSize < commonSubs.length) {
-            await new Promise(r => setTimeout(r, 100));
+          if (i + batchSize < subsToCheck.length) {
+            await new Promise(r => setTimeout(r, 50));
           }
         }
 
         if (foundSubdomains.length === 0) {
-          try {
-            const addrs = await dns.promises.resolve4(`www.${hostname}`);
-            foundSubdomains.push({ subdomain: `www.${hostname}`, ip: addrs[0], status: 'up', type: 'A' });
-          } catch (e) {
-            try {
-              const addrs = await dns.promises.resolve4(hostname);
-              foundSubdomains.push({ subdomain: hostname, ip: addrs[0], status: 'up', type: 'A' });
-            } catch (e2) {
-              foundSubdomains.push({ subdomain: hostname, ip: 'Unknown', status: 'up', type: 'A' });
-            }
-          }
+          foundSubdomains.push({ subdomain: searchDomain, ip: 'Unknown', status: 'down', type: 'A' });
         }
+        
+        // Sort by subdomain name
+        foundSubdomains.sort((a, b) => a.subdomain.localeCompare(b.subdomain));
+        
         return res.json(foundSubdomains);
 
       case 'ports':
