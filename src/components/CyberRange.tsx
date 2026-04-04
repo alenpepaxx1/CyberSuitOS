@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 
 interface SimulationStep {
   id: string;
@@ -127,24 +128,15 @@ export default function CyberRange() {
 
       // Simulate AI-generated logs for each step
       try {
-        const response = await fetch('/api/ai-generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `Generate 5 technical log entries for a cybersecurity simulation step: ${steps[i].title}. 
-            The scenario is: ${activeScenario.name}. Return as a JSON array of strings.` }] }],
-            config: {
-              responseMimeType: "application/json",
-              systemInstruction: "You are a CyberSuite OS Simulation Engine. Generate realistic, technical security logs for training purposes. Return ONLY a JSON array of strings.",
-            }
-          })
+        const resData = await fetchAiGenerate({
+          contents: [{ role: 'user', parts: [{ text: `Generate 5 technical log entries for a cybersecurity simulation step: ${steps[i].title}. 
+          The scenario is: ${activeScenario.name}. Return as a JSON array of strings.` }] }],
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: "You are a CyberSuite OS Simulation Engine. Generate realistic, technical security logs for training purposes. Return ONLY a JSON array of strings.",
+          }
         });
 
-        if (!response.ok) {
-          throw new Error('AI Generation failed');
-        }
-
-        const resData = await response.json();
         const newLogs = JSON.parse(resData.text || '[]');
         setSteps(prev => prev.map((s, idx) => idx === i ? { ...s, status: 'completed', logs: newLogs } : s));
         await new Promise(r => setTimeout(r, 2000));
