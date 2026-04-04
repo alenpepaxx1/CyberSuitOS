@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
+import { logToTerminal } from './Terminal';
 
 interface RedFlag {
   id: string;
@@ -82,7 +83,17 @@ export default function PhishingSimulator() {
       }
 
       const resData = await response.json();
-      const data = JSON.parse(resData.text || '{}');
+      let text = resData.text || '{}';
+      
+      // Strip markdown code blocks if present
+      if (text.includes('```')) {
+        const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+          text = match[1];
+        }
+      }
+      
+      const data = JSON.parse(text);
       setCampaign({
         id: Math.random().toString(36).substr(2, 9),
         target,
@@ -101,7 +112,55 @@ export default function PhishingSimulator() {
         }
       });
     } catch (error) {
-      console.error("Failed to generate campaign:", error);
+      console.error("Failed to generate campaign, using local engine:", error);
+      
+      // Fallback Engine
+      const fallbackData = {
+        subject: `[URGENT] Action Required: ${target} Security Update`,
+        content: `
+          <div style="font-family: sans-serif; color: #333; max-width: 600px;">
+            <h2 style="color: #d32f2f;">Security Alert: Unauthorized Access Attempt</h2>
+            <p>Dear Employee,</p>
+            <p>Our security systems have detected an unusual login attempt to your <strong>${target}</strong> corporate account from an unrecognized location (IP: 103.45.21.99 - Moscow, RU).</p>
+            <p>As a precautionary measure, your account access has been temporarily restricted. To restore full access and verify your identity, please click the secure link below within the next 4 hours.</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="#" style="background-color: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Verify Account Identity</a>
+            </div>
+            <p style="font-size: 12px; color: #666;">If you do not complete this verification, your account will be permanently locked for security reasons.</p>
+            <p>Thank you,<br><strong>${target} Global IT Security Team</strong></p>
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="font-size: 10px; color: #999;">This is an automated message. Please do not reply to this email.</p>
+          </div>
+        `,
+        redFlags: [
+          { id: '1', location: 'Sender Address', description: 'The email claims to be from IT Security but the domain might be slightly off (e.g., internal-security.net instead of company.com).' },
+          { id: '2', location: 'Urgency', description: 'The message creates a false sense of panic by threatening to lock the account within 4 hours.' },
+          { id: '3', location: 'Link Destination', description: 'Hovering over the button reveals a suspicious URL that does not belong to the corporate domain.' }
+        ],
+        psychologicalTriggers: ['Urgency', 'Authority', 'Fear'],
+        phishScore: 78,
+        metrics: {
+          clickRate: 14.5,
+          reportRate: 6.2,
+          compromiseRate: 3.1,
+          deptBreakdown: [
+            { dept: 'Finance', rate: 18 },
+            { dept: 'HR', rate: 12 },
+            { dept: 'Engineering', rate: 5 },
+            { dept: 'Sales', rate: 22 }
+          ]
+        }
+      };
+
+      setCampaign({
+        id: Math.random().toString(36).substr(2, 9),
+        target,
+        type,
+        difficulty,
+        ...fallbackData
+      });
+      
+      logToTerminal("AI Core offline. Using Local Phishing Synthesis Engine.", "warn");
     } finally {
       setIsLoading(false);
     }
