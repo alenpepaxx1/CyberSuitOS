@@ -23,6 +23,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import CryptoJS from 'crypto-js';
 import { logToTerminal } from './Terminal';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 
 type Mode = 'hash' | 'encode' | 'encrypt';
 type EncryptSubMode = 'encrypt' | 'decrypt';
@@ -55,20 +56,13 @@ export default function CryptoTool() {
     logToTerminal('Initializing Neural Crypto Analysis...', 'info');
     
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `Analyze this cryptographic string: "${input}". Identify if it looks like a specific hash (MD5, SHA, etc.), an encoding (Base64, Hex, etc.), or ciphertext. Provide a brief, highly technical 2-paragraph analysis of its entropy, format, and potential origin. Do not output markdown, just plain text.` }] }],
-          config: {
-            systemInstruction: "You are a CyberSuite OS Cryptography Analyzer. Be highly technical, precise, and objective. Do not use markdown.",
-          }
-        })
+      const resData = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `Analyze this cryptographic string: "${input}". Identify if it looks like a specific hash (MD5, SHA, etc.), an encoding (Base64, Hex, etc.), or ciphertext. Provide a brief, highly technical 2-paragraph analysis of its entropy, format, and potential origin. Do not output markdown, just plain text.` }] }],
+        config: {
+          systemInstruction: "You are a CyberSuite OS Cryptography Analyzer. Be highly technical, precise, and objective. Do not use markdown.",
+        }
       });
 
-      if (!response.ok) throw new Error('AI Generation failed');
-
-      const resData = await response.json();
       setAiAnalysis(resData.text);
       logToTerminal('Neural Crypto Analysis complete.', 'success');
     } catch (error) {
@@ -160,7 +154,6 @@ export default function CryptoTool() {
   const getHash = () => {
     if (!input) return '';
     try {
-      logToTerminal(`Calculating ${algorithm} hash...`, 'info');
       switch (algorithm) {
         case 'MD5': return CryptoJS.MD5(input).toString();
         case 'SHA1': return CryptoJS.SHA1(input).toString();
