@@ -1,5 +1,5 @@
 <div align="center">
-<img width="1920" height="2577" alt="Cyber" src="https://i.ibb.co/SXwYthQr/screencapture-localhost-3000-2026-04-01-12-22-03.png" />
+<img width="1920" height="2577" alt="Cyber" src="https://i.ibb.co/HDxRPYsr/screencapture-localhost-3000-2026-04-04-15-35-55.png" />
 </div>
 
 # CyberSuite OS 🛡️
@@ -56,7 +56,8 @@
 3. **Environment Variables:**
    Create a `.env` file in the root directory and add your credentials:
    ```env
-
+   # Firebase configuration will be loaded from firebase-applet-config.json
+   ```
 
 4. **Start the development server:**
    ```bash
