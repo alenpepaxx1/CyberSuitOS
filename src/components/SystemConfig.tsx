@@ -56,6 +56,10 @@ export default function SystemConfig() {
   const [memAllocation, setMemAllocation] = useState(85);
   const [verboseLogging, setVerboseLogging] = useState(false);
   const [kernelDebug, setKernelDebug] = useState(false);
+  const [zeroTrust, setZeroTrust] = useState(true);
+  const [kernelIntegrity, setKernelIntegrity] = useState(true);
+  const [hsmStatus, setHsmStatus] = useState('active');
+  const [aiAutonomy, setAiAutonomy] = useState(80);
 
   const handleReset = () => {
     if (confirm("Are you sure you want to reset all system configurations to default?")) {
@@ -232,6 +236,31 @@ export default function SystemConfig() {
               </button>
             </div>
 
+            <div className="flex items-center justify-between pt-2 border-t border-white/5">
+              <div className="flex items-center gap-3">
+                <Shield size={18} className={cn(zeroTrust ? "text-emerald-500" : "text-gray-500")} />
+                <div>
+                  <div className="text-sm font-bold text-white">Zero-Trust Architecture</div>
+                  <div className="text-[10px] text-gray-500 font-mono">Micro-segmentation & continuous auth</div>
+                </div>
+              </div>
+              <button 
+                onClick={() => {
+                  setZeroTrust(!zeroTrust);
+                  logToTerminal(`Zero-Trust Architecture ${!zeroTrust ? 'ENFORCED' : 'RELAXED'}`, zeroTrust ? 'warn' : 'success');
+                }}
+                className={cn(
+                  "w-12 h-6 rounded-full transition-all relative",
+                  zeroTrust ? "bg-emerald-500" : "bg-white/10"
+                )}
+              >
+                <motion.div 
+                  animate={{ x: zeroTrust ? 26 : 2 }}
+                  className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
+                />
+              </button>
+            </div>
+
             <div className="space-y-4 pt-4 border-t border-white/5">
               <div className="space-y-2">
                 <label className="text-xs font-mono text-gray-500 uppercase">IDS/IPS Mode</label>
@@ -289,6 +318,25 @@ export default function SystemConfig() {
                     className="absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm"
                   />
                 </button>
+              </div>
+
+              <div className="space-y-2 pt-4 border-t border-white/5">
+                <div className="flex justify-between">
+                  <label className="text-xs font-mono text-gray-500 uppercase">AI Threat Response Autonomy</label>
+                  <span className={cn("text-xs font-mono font-bold", aiAutonomy > 80 ? "text-red-400" : "text-blue-400")}>{aiAutonomy}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="100" 
+                  value={aiAutonomy}
+                  onChange={(e) => setAiAutonomy(parseInt(e.target.value))}
+                  className="w-full accent-blue-500"
+                />
+                <div className="flex justify-between text-[8px] font-mono text-gray-600 uppercase">
+                  <span>Manual Only</span>
+                  <span>Fully Autonomous (Lethal)</span>
+                </div>
               </div>
             </div>
           </div>
