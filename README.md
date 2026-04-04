@@ -1,5 +1,5 @@
 <div align="center">
-<img width="1920" height="2577" alt="Cyber" src="https://i.ibb.co/HDxRPYsr/screencapture-localhost-3000-2026-04-04-15-35-55.png" />
+<img width="1920" height="2577" alt="Cyber" src="https://i.ibb.co/xSfwgG0M/screencapture-localhost-3000-2026-04-04-15-35-55.png" />
 </div>
 
 # CyberSuite OS 🛡️
