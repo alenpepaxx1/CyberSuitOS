@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
 import Markdown from 'react-markdown';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 
 interface Message {
   id: string;
@@ -65,22 +66,12 @@ export default function SecurityAnalyst() {
     logToTerminal(`Initiating Alen's security analysis...`, 'info');
     
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `Analyze the following security query or payload and provide a concise, technical explanation of risks and remediation. Query: ${userMessage.content}` }] }],
-          config: {
-            systemInstruction: "You are Alen, the CyberSuite OS AI Security Analyst. Be technical, concise, and professional. Use markdown for formatting. If the user asks who you are, identify as Alen.",
-          }
-        })
+      const data = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `Analyze the following security query or payload and provide a concise, technical explanation of risks and remediation. Query: ${userMessage.content}` }] }],
+        config: {
+          systemInstruction: "You are Alen, the CyberSuite OS AI Security Analyst. Be technical, concise, and professional. Use markdown for formatting. If the user asks who you are, identify as Alen.",
+        }
       });
-
-      if (!response.ok) {
-        throw new Error('AI analysis failed');
-      }
-
-      const data = await response.json();
       
       const aiMessage: Message = {
         id: (Date.now() + 1).toString(),
