@@ -116,8 +116,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       const res = await fetch('/api/live-stats');
       if (res.ok) {
         const data = await res.json();
-        setLiveActiveThreats(data.activeThreats);
-        setLiveBlockedAttacks(data.blockedAttacks);
+        setLiveActiveThreats(data.activeThreats || 0);
+        setLiveBlockedAttacks(data.blockedAttacks || 0);
         if (data.liveFeed && data.liveFeed.length > 0) {
           setLiveFeed(data.liveFeed);
         }
@@ -314,8 +314,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Active Threats', value: firewallEnabled ? liveActiveThreats.toLocaleString() : (liveActiveThreats * 6).toLocaleString(), icon: AlertTriangle, color: firewallEnabled ? 'text-amber-500' : 'text-red-500', trend: firewallEnabled ? '+12%' : '+450%', trendUp: !firewallEnabled, desc: 'Real-time detected vectors' },
-          { label: 'Blocked Attacks', value: firewallEnabled ? (liveBlockedAttacks / 1000).toFixed(1) + 'k' : '0', icon: Shield, color: firewallEnabled ? 'text-emerald-500' : 'text-gray-500', trend: firewallEnabled ? '+5.4%' : '-100%', trendUp: firewallEnabled, desc: 'Successfully mitigated probes' },
+          { label: 'Active Threats', value: firewallEnabled ? (liveActiveThreats || 0).toLocaleString() : ((liveActiveThreats || 0) * 6).toLocaleString(), icon: AlertTriangle, color: firewallEnabled ? 'text-amber-500' : 'text-red-500', trend: firewallEnabled ? '+12%' : '+450%', trendUp: !firewallEnabled, desc: 'Real-time detected vectors' },
+          { label: 'Blocked Attacks', value: firewallEnabled ? ((liveBlockedAttacks || 0) / 1000).toFixed(1) + 'k' : '0', icon: Shield, color: firewallEnabled ? 'text-emerald-500' : 'text-gray-500', trend: firewallEnabled ? '+5.4%' : '-100%', trendUp: firewallEnabled, desc: 'Successfully mitigated probes' },
           { label: 'System Health', value: firewallEnabled ? '99.8%' : '64.2%', icon: Activity, color: firewallEnabled ? 'text-blue-500' : 'text-red-500', trend: firewallEnabled ? 'Stable' : 'Critical', trendUp: firewallEnabled, desc: 'Core kernel integrity status' },
           { label: 'Neural VPN', value: vpnEnabled ? 'CONNECTED' : 'OFFLINE', icon: Globe, color: vpnEnabled ? 'text-blue-500' : 'text-gray-500', trend: vpnEnabled ? 'Secure' : 'Exposed', trendUp: vpnEnabled, desc: 'Encrypted tunnel status' },
         ].map((stat, i) => (
@@ -466,6 +466,53 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 />
               </AreaChart>
             </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Real-time Traffic Analysis */}
+        <div className="lg:col-span-3 cyber-card rounded-xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-500" />
+              <h2 className="text-sm font-mono uppercase tracking-widest text-white">Real-time Traffic Analysis</h2>
+            </div>
+            <div className="text-[10px] font-mono text-gray-500 uppercase">Throughput: 1.2 GB/s</div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="md:col-span-3 h-[200px] bg-black/40 rounded-xl border border-white/5 p-4 relative overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-around">
+                {[...Array(20)].map((_, i) => (
+                  <motion.div
+                    key={i}
+                    className="w-1 bg-blue-500/30 rounded-full"
+                    animate={{ 
+                      height: [
+                        `${Math.random() * 60 + 20}%`, 
+                        `${Math.random() * 60 + 20}%`, 
+                        `${Math.random() * 60 + 20}%`
+                      ] 
+                    }}
+                    transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                  />
+                ))}
+              </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+              <div className="absolute bottom-4 left-4 text-[10px] font-mono text-blue-400 uppercase">Packet Inspection Active</div>
+            </div>
+            <div className="space-y-4">
+              <div className="p-3 bg-white/5 border border-white/5 rounded-lg">
+                <div className="text-[9px] font-mono text-gray-500 uppercase mb-1">TCP Handshakes</div>
+                <div className="text-lg font-bold text-white">12,432/s</div>
+              </div>
+              <div className="p-3 bg-white/5 border border-white/5 rounded-lg">
+                <div className="text-[9px] font-mono text-gray-500 uppercase mb-1">UDP Datagrams</div>
+                <div className="text-lg font-bold text-white">8,102/s</div>
+              </div>
+              <div className="p-3 bg-white/5 border border-white/5 rounded-lg">
+                <div className="text-[9px] font-mono text-gray-500 uppercase mb-1">ICMP Echo</div>
+                <div className="text-lg font-bold text-white">452/s</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
