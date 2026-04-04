@@ -581,13 +581,19 @@ async function startServer() {
         try {
           const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
           const crtResponse: any = await new Promise((resolve, reject) => {
-            const req = https.get(crtUrl, (res) => {
+            const options = {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              }
+            };
+            const req = https.get(crtUrl, options, (res) => {
               let data = '';
               res.on('data', chunk => data += chunk);
               res.on('end', () => resolve({ statusCode: res.statusCode, data }));
             });
             req.on('error', reject);
-            req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
+            // crt.sh can be very slow, increase timeout to 15 seconds
+            req.setTimeout(15000, () => { req.destroy(); reject(new Error('Timeout')); });
           });
 
           if (crtResponse.statusCode === 200 && crtResponse.data) {
@@ -601,8 +607,8 @@ async function startServer() {
               });
             });
           }
-        } catch (e) {
-          console.error('crt.sh fetch failed:', e);
+        } catch (e: any) {
+          console.warn(`[Scanner] crt.sh fetch skipped/failed (${e.message}). Falling back to dictionary brute-force only.`);
         }
 
         // 2. Add common subdomains to check
