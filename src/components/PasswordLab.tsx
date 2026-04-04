@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
+import { fetchAiGenerate } from '../lib/ai-fetch';
 
 // Simulated hashing function (for educational purposes)
 const simulateHash = (text: string, algorithm: string) => {
@@ -218,20 +219,13 @@ export default function PasswordLab() {
     logToTerminal('Initializing Neural Threat Analysis on password structure...', 'info');
     
     try {
-      const response = await fetch('/api/ai-generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `Analyze this password from a cybersecurity perspective: "${password}". Provide a brief, highly technical 2-paragraph analysis of its structural weaknesses, predictability, and resistance to modern cracking techniques (dictionary, mask, rule-based, brute-force). Do not output markdown, just plain text.` }] }],
-          config: {
-            systemInstruction: "You are a CyberSuite OS Password Security Analyzer. Be highly technical, precise, and objective. Do not use markdown.",
-          }
-        })
+      const resData = await fetchAiGenerate({
+        contents: [{ role: 'user', parts: [{ text: `Analyze this password from a cybersecurity perspective: "${password}". Provide a brief, highly technical 2-paragraph analysis of its structural weaknesses, predictability, and resistance to modern cracking techniques (dictionary, mask, rule-based, brute-force). Do not output markdown, just plain text.` }] }],
+        config: {
+          systemInstruction: "You are a CyberSuite OS Password Security Analyzer. Be highly technical, precise, and objective. Do not use markdown.",
+        }
       });
 
-      if (!response.ok) throw new Error('AI Generation failed');
-
-      const resData = await response.json();
       setAiAnalysis(resData.text);
       logToTerminal('Neural Threat Analysis complete.', 'success');
     } catch (error) {
