@@ -74,19 +74,24 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [mapNodes, setMapNodes] = useState<any[] | undefined>(undefined);
   const [attackLines, setAttackLines] = useState<any[]>([]);
   const [threatNews, setThreatNews] = useState<ThreatNews[]>([]);
+  const [liveFeed, setLiveFeed] = useState<ThreatNews[]>([]);
+  const [liveActiveThreats, setLiveActiveThreats] = useState<number>(1242);
+  const [liveBlockedAttacks, setLiveBlockedAttacks] = useState<number>(45200);
   const [tickerIndex, setTickerIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
 
-  const TICKER_MESSAGES = threatNews.length > 0 
-    ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
-    : [
-        "CRITICAL: Zero-day exploit detected in major CDN provider",
-        "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
-        "INFO: New ransomware strain 'CyberLock' identified by AI core",
-        "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
-        "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
-        "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
-      ];
+  const TICKER_MESSAGES = liveFeed.length > 0 
+    ? liveFeed.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+    : threatNews.length > 0 
+      ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+      : [
+          "CRITICAL: Zero-day exploit detected in major CDN provider",
+          "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+          "INFO: New ransomware strain 'CyberLock' identified by AI core",
+          "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+          "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+          "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+        ];
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [systemLoad, setSystemLoad] = useState(42);
   const [logs, setLogs] = useState<LogEntry[]>([
@@ -97,6 +102,22 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const [isPaused, setIsPaused] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LogEntry | null>(null);
   const [filter, setFilter] = useState<string>('all');
+
+  const fetchLiveStats = async () => {
+    try {
+      const res = await fetch('/api/live-stats');
+      if (res.ok) {
+        const data = await res.json();
+        setLiveActiveThreats(data.activeThreats);
+        setLiveBlockedAttacks(data.blockedAttacks);
+        if (data.liveFeed && data.liveFeed.length > 0) {
+          setLiveFeed(data.liveFeed);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch live stats:", e);
+    }
+  };
 
   const fetchRealLogs = async () => {
     if (isPaused) return;
@@ -160,6 +181,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   }, []); // Run once on mount
 
   useEffect(() => {
+    fetchLiveStats();
+    const liveStatsInterval = setInterval(fetchLiveStats, 5000); // Every 5 seconds
+    return () => clearInterval(liveStatsInterval);
+  }, []);
+
+  useEffect(() => {
     const loadInterval = setInterval(() => {
       setSystemLoad(prev => Math.max(10, Math.min(95, prev + (Math.random() * 10 - 5))));
     }, 5000);
@@ -174,21 +201,23 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   useEffect(() => {
     const tickerInterval = setInterval(() => {
       setTickerIndex((prev) => {
-        const messages = threatNews.length > 0 
-          ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
-          : [
-              "CRITICAL: Zero-day exploit detected in major CDN provider",
-              "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
-              "INFO: New ransomware strain 'CyberLock' identified by AI core",
-              "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
-              "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
-              "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
-            ];
+        const messages = liveFeed.length > 0 
+          ? liveFeed.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+          : threatNews.length > 0 
+            ? threatNews.map(n => `${n.severity.toUpperCase()}: ${n.title} [Source: ${n.source}]`)
+            : [
+                "CRITICAL: Zero-day exploit detected in major CDN provider",
+                "ALERT: Massive DDoS attack targeting financial infrastructure in East Asia",
+                "INFO: New ransomware strain 'CyberLock' identified by AI core",
+                "WARNING: Unusual traffic spike detected from unknown ASN in Eastern Europe",
+                "NOTICE: System firewall successfully blocked 12,432 intrusion attempts in the last hour",
+                "UPDATE: Global threat level elevated to ORANGE due to increased C2 activity"
+              ];
         return (prev + 1) % messages.length;
       });
     }, 5000);
     return () => clearInterval(tickerInterval);
-  }, [threatNews]); // Only re-run if threatNews changes
+  }, [liveFeed, threatNews]); // Only re-run if liveFeed or threatNews changes
 
   return (
     <div className="space-y-6 p-6 bg-[#050505] min-h-full rounded-2xl border border-[#222] cyber-grid">
@@ -277,8 +306,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Active Threats', value: firewallEnabled ? '1,242' : '8,421', icon: AlertTriangle, color: firewallEnabled ? 'text-amber-500' : 'text-red-500', trend: firewallEnabled ? '+12%' : '+450%', trendUp: !firewallEnabled, desc: 'Real-time detected vectors' },
-          { label: 'Blocked Attacks', value: firewallEnabled ? '45.2k' : '0', icon: Shield, color: firewallEnabled ? 'text-emerald-500' : 'text-gray-500', trend: firewallEnabled ? '+5.4%' : '-100%', trendUp: firewallEnabled, desc: 'Successfully mitigated probes' },
+          { label: 'Active Threats', value: firewallEnabled ? liveActiveThreats.toLocaleString() : (liveActiveThreats * 6).toLocaleString(), icon: AlertTriangle, color: firewallEnabled ? 'text-amber-500' : 'text-red-500', trend: firewallEnabled ? '+12%' : '+450%', trendUp: !firewallEnabled, desc: 'Real-time detected vectors' },
+          { label: 'Blocked Attacks', value: firewallEnabled ? (liveBlockedAttacks / 1000).toFixed(1) + 'k' : '0', icon: Shield, color: firewallEnabled ? 'text-emerald-500' : 'text-gray-500', trend: firewallEnabled ? '+5.4%' : '-100%', trendUp: firewallEnabled, desc: 'Successfully mitigated probes' },
           { label: 'System Health', value: firewallEnabled ? '99.8%' : '64.2%', icon: Activity, color: firewallEnabled ? 'text-blue-500' : 'text-red-500', trend: firewallEnabled ? 'Stable' : 'Critical', trendUp: firewallEnabled, desc: 'Core kernel integrity status' },
           { label: 'Neural VPN', value: vpnEnabled ? 'CONNECTED' : 'OFFLINE', icon: Globe, color: vpnEnabled ? 'text-blue-500' : 'text-gray-500', trend: vpnEnabled ? 'Secure' : 'Exposed', trendUp: vpnEnabled, desc: 'Encrypted tunnel status' },
         ].map((stat, i) => (
@@ -636,12 +665,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <div className="p-4 border-b border-white/5 bg-black/40 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Radio className="w-5 h-5 text-red-500" />
-              <h2 className="text-sm font-mono uppercase tracking-widest text-white">Intel Feed</h2>
+              <h2 className="text-sm font-mono uppercase tracking-widest text-white">Live Threat Feed</h2>
             </div>
             <div className="text-[9px] font-mono text-gray-500 uppercase">Source: Global_Net</div>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar max-h-[350px]">
-            {isLoading ? (
+            {isLoading && liveFeed.length === 0 ? (
               <div className="space-y-4">
                 {[1, 2, 3].map(i => (
                   <div key={i} className="animate-pulse space-y-2">
@@ -652,13 +681,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 ))}
               </div>
             ) : (
-              <AnimatePresence>
-                {threatNews.map((news, i) => (
+              <AnimatePresence mode="popLayout">
+                {(liveFeed.length > 0 ? liveFeed : threatNews).map((news, i) => (
                   <motion.div
-                    key={i}
+                    key={news.title + i}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: i * 0.1 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.3 }}
                     className="p-3 bg-white/5 border border-white/5 rounded-lg hover:border-red-500/30 transition-all group cursor-pointer"
                   >
                     <div className="flex items-center justify-between mb-2">
