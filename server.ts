@@ -598,6 +598,7 @@ async function startServer() {
 
   app.get("/api/scan", async (req, res) => {
     const target = req.query.target as string;
+    const depth = req.query.depth as string || 'standard';
     if (!target) {
       return res.status(400).json({ error: "Target is required" });
     }
@@ -635,7 +636,6 @@ async function startServer() {
           } else {
             const resolveDNS = async (host: string) => {
               try {
-                // Use lookup for primary IP as it's faster and more reliable
                 const lookup = await Promise.race([
                   dns.promises.lookup(host),
                   new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
@@ -643,7 +643,12 @@ async function startServer() {
                 results.dns.a = [lookup.address];
                 results.ip = lookup.address;
                 
-                // Try to get other records in parallel with timeouts
+                // Deep scan: perform more DNS lookups
+                if (depth === 'deep') {
+                  try { results.dns.ns = await dns.promises.resolveNs(host); } catch(e) {}
+                  try { results.dns.txt = await dns.promises.resolveTxt(host); } catch(e) {}
+                }
+                
                 const dnsTimeout = 3000;
                 try { 
                   results.dns.mx = await Promise.race([
@@ -959,7 +964,20 @@ async function startServer() {
           'status', 'monitor', 'monitoring', 'zabbix', 'nagios', 'grafana', 'prometheus',
           'jenkins', 'gitlab', 'docker', 'registry', 'k8s', 'kubernetes', 'cluster',
           'db', 'database', 'sql', 'mysql', 'postgres', 'redis', 'elastic', 'mongo',
-          'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2'
+          'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2',
+          'dev1', 'dev2', 'dev3', 'qa', 'uat', 'prod', 'production', 'sandbox', 'preprod',
+          'api1', 'api2', 'api3', 'web', 'web1', 'web2', 'web3', 'app1', 'app2', 'app3',
+          'mail1', 'mail2', 'mail3', 'smtp1', 'smtp2', 'smtp3', 'pop1', 'pop2', 'pop3',
+          'imap1', 'imap2', 'imap3', 'ftp1', 'ftp2', 'ftp3', 'ssh', 'vpn1', 'vpn2', 'vpn3',
+          'proxy', 'proxy1', 'proxy2', 'proxy3', 'loadbalancer', 'lb', 'gateway', 'gw',
+          'firewall', 'fw', 'router', 'switch', 'hub', 'bridge', 'dns1', 'dns2', 'dns3',
+          'ns', 'ns3', 'ns4', 'mx1', 'mx2', 'mx3', 'txt', 'spf', 'dkim', 'dmarc',
+          'devops', 'sysadmin', 'root', 'super', 'manager', 'owner', 'user', 'users',
+          'customer', 'customers', 'partner', 'partners', 'vendor', 'vendors', 'supplier',
+          'suppliers', 'employee', 'employees', 'hr', 'finance', 'accounting', 'legal',
+          'marketing', 'sales', 'support1', 'support2', 'helpdesk', 'service', 'services',
+          'api-gateway', 'gateway-api', 'microservice', 'microservices', 'service1', 'service2',
+          'node1', 'node2', 'node3', 'server1', 'server2', 'server3', 'host1', 'host2', 'host3'
         ];
         
         const dictionarySubs = commonSubs.map(sub => `${sub}.${searchDomain}`);
