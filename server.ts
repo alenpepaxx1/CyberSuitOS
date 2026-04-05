@@ -12,6 +12,7 @@ import net from "net";
 import axios from "axios";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createRequire } from "module";
+import pLimit from 'p-limit';
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -701,8 +702,8 @@ async function startServer() {
               results.headers = response.headers;
               results.statusCode = response.statusCode;
               
-              const server = (response.headers['server'] || '').toLowerCase();
-              const xPoweredBy = (response.headers['x-powered-by'] || '').toLowerCase();
+              const server = (Array.isArray(response.headers['server']) ? response.headers['server'].join(', ') : (response.headers['server'] || '')).toLowerCase();
+              const xPoweredBy = (Array.isArray(response.headers['x-powered-by']) ? response.headers['x-powered-by'].join(', ') : (response.headers['x-powered-by'] || '')).toLowerCase();
               if (server.includes('apache')) results.tech.push('Apache');
               if (server.includes('nginx')) results.tech.push('Nginx');
               if (xPoweredBy.includes('php')) results.tech.push('PHP');
@@ -966,33 +967,28 @@ async function startServer() {
 
         // 2. Start resolving dictionary subdomains immediately
         const resolveBatch = async (subs: string[]) => {
-          const batchSize = 100;
-          for (let i = 0; i < subs.length; i += batchSize) {
-            const batch = subs.slice(i, i + batchSize);
-            await Promise.all(batch.map(async (domain) => {
-              if (resolvedSubs.has(domain)) return;
-              try {
-                // Add a 2s timeout for each DNS lookup to prevent hanging
-                console.log(`[Scanner] Resolving subdomain: ${domain}`);
-                const lookup = await Promise.race([
-                  dns.promises.lookup(domain),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
-                ]) as any;
-                console.log(`[Scanner] Resolved ${domain}:`, lookup);
-                
-                if (lookup && lookup.address) {
-                  foundSubdomains.push({ 
-                    subdomain: domain, 
-                    ip: lookup.address, 
-                    status: 'up', 
-                    type: lookup.family === 6 ? 'AAAA' : 'A',
-                    last_seen: new Date().toISOString()
-                  });
-                }
-              } catch (e) {}
-              resolvedSubs.add(domain);
-            }));
-          }
+          const limit = pLimit(10); // Limit to 10 concurrent lookups
+          await Promise.all(subs.map(domain => limit(async () => {
+            if (resolvedSubs.has(domain)) return;
+            try {
+              // Add a 2s timeout for each DNS lookup to prevent hanging
+              const lookup = await Promise.race([
+                dns.promises.lookup(domain),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+              ]) as any;
+              
+              if (lookup && lookup.address) {
+                foundSubdomains.push({ 
+                  subdomain: domain, 
+                  ip: lookup.address, 
+                  status: 'up', 
+                  type: lookup.family === 6 ? 'AAAA' : 'A',
+                  last_seen: new Date().toISOString()
+                });
+              }
+            } catch (e) {}
+            resolvedSubs.add(domain);
+          })));
         };
 
         // 3. Start crt.sh fetch, HackerTarget fetch, and dictionary resolution in parallel
@@ -1083,7 +1079,8 @@ async function startServer() {
         ];
         const portResults: any[] = [];
         
-        await Promise.all(commonPorts.map(port => {
+        const limit = pLimit(20); // Limit to 20 concurrent port scans
+        await Promise.all(commonPorts.map(port => limit(() => {
           return new Promise((resolve) => {
             const socket = new net.Socket();
             socket.setTimeout(1500);
@@ -1113,7 +1110,7 @@ async function startServer() {
             });
             socket.connect(port, hostname);
           });
-        }));
+        })));
         return res.json(portResults.sort((a, b) => a.port - b.port));
 
       case 'headers':
@@ -1190,7 +1187,8 @@ async function startServer() {
         ];
         
         const resolveDNS = async (host: string) => {
-          await Promise.all(recordTypes.map(async ({ type, label }) => {
+          const limit = pLimit(5); // Limit to 5 concurrent DNS lookups
+          await Promise.all(recordTypes.map(async ({ type, label }) => limit(async () => {
             try {
               const method = dns.promises[type] as Function;
               // Add a 3s timeout for each DNS lookup
@@ -1204,7 +1202,7 @@ async function startServer() {
             } catch (e) {
               // Record type not found or timeout
             }
-          }));
+          })));
         };
 
         await resolveDNS(hostname);
