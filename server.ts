@@ -444,28 +444,39 @@ async function startServer() {
         results.dns.a = [hostname];
         results.ip = hostname;
       } else {
-        try {
-          const addresses = await new Promise<string[]>((resolve, reject) => {
-            dns.resolve4(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
-          });
-          results.dns.a = addresses;
-          results.ip = addresses[0];
+        const resolveDNS = async (host: string) => {
+          try {
+            const addresses = await dns.promises.resolve4(host);
+            results.dns.a = addresses;
+            results.ip = addresses[0];
+          } catch (e) {
+            // Try lookup if resolve4 fails
+            try {
+              const lookup = await dns.promises.lookup(host);
+              results.dns.a = [lookup.address];
+              results.ip = lookup.address;
+            } catch (e2) {
+              if (!results.dns.error) results.dns.error = "DNS resolution failed";
+            }
+          }
           
           try {
-            const mx = await new Promise<any[]>((resolve, reject) => {
-              dns.resolveMx(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
-            });
+            const mx = await dns.promises.resolveMx(host);
             results.dns.mx = mx;
           } catch (e) {}
 
           try {
-            const txt = await new Promise<string[][]>((resolve, reject) => {
-              dns.resolveTxt(hostname, (err, addrs) => err ? reject(err) : resolve(addrs));
-            });
+            const txt = await dns.promises.resolveTxt(host);
             results.dns.txt = txt;
           } catch (e) {}
-        } catch (e) {
-          results.dns.error = "DNS resolution failed";
+        };
+
+        await resolveDNS(hostname);
+        
+        // Fallback to root domain if no IP found and it's a www subdomain
+        if (!results.ip && hostname.startsWith('www.')) {
+          const rootDomain = hostname.substring(4);
+          await resolveDNS(rootDomain);
         }
       }
 
@@ -931,17 +942,53 @@ async function startServer() {
 
       case 'dns':
         const dnsRecords: any = {};
-        const recordTypes: (keyof typeof dns.promises)[] = ['resolve4', 'resolve6', 'resolveMx', 'resolveNs', 'resolveTxt', 'resolveSoa', 'resolveCname', 'resolveSrv', 'resolveCaa'];
+        const recordTypes: { type: keyof typeof dns.promises; label: string }[] = [
+          { type: 'resolve4', label: 'A' },
+          { type: 'resolve6', label: 'AAAA' },
+          { type: 'resolveMx', label: 'MX' },
+          { type: 'resolveNs', label: 'NS' },
+          { type: 'resolveTxt', label: 'TXT' },
+          { type: 'resolveSoa', label: 'SOA' },
+          { type: 'resolveCname', label: 'CNAME' },
+          { type: 'resolveSrv', label: 'SRV' },
+          { type: 'resolveCaa', label: 'CAA' }
+        ];
         
-        await Promise.all(recordTypes.map(async (type) => {
-          try {
-            const method = dns.promises[type] as Function;
-            const result = await method(hostname);
-            dnsRecords[type.replace('resolve', '').toUpperCase()] = result;
-          } catch (e) {
-            // Record type not found
+        const resolveDNS = async (host: string) => {
+          await Promise.all(recordTypes.map(async ({ type, label }) => {
+            try {
+              const method = dns.promises[type] as Function;
+              const result = await method(host);
+              if (result && (Array.isArray(result) ? result.length > 0 : true)) {
+                dnsRecords[label] = result;
+              }
+            } catch (e) {
+              // Record type not found
+            }
+          }));
+        };
+
+        await resolveDNS(hostname);
+
+        // If no records found and it's a www subdomain, try the root domain
+        if (Object.keys(dnsRecords).length === 0 && hostname.startsWith('www.')) {
+          const rootDomain = hostname.substring(4);
+          await resolveDNS(rootDomain);
+        }
+
+        // Add basic lookup if still nothing or as extra info
+        try {
+          const lookup = await dns.promises.lookup(hostname);
+          if (lookup && !dnsRecords['A'] && !dnsRecords['AAAA']) {
+            dnsRecords['IP Lookup'] = [lookup.address];
           }
-        }));
+        } catch (e) {}
+
+        // If still empty, provide a "No Records" message
+        if (Object.keys(dnsRecords).length === 0) {
+          dnsRecords['Status'] = ["No public DNS records found for this target."];
+        }
+
         return res.json(dnsRecords);
 
       case 'fuzzer':
