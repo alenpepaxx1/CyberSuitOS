@@ -464,15 +464,30 @@ async function startServer() {
         // Fallback to whois-json if RDAP fails or is not supported for TLD
         try {
           const whoisJson = require('whois-json');
-          let options: any = {};
+          let options: any = { timeout: 10000 }; // Set a 10s timeout for each attempt
           if (hostname.endsWith('.al')) {
             options.server = 'whois.nic.al'; 
           }
-          let whoisData = await whoisJson(hostname, options);
           
-          // If first attempt fails, try without explicit server
-          if ((!whoisData || whoisData.error) && options.server) {
-            whoisData = await whoisJson(hostname);
+          let whoisData: any = null;
+          let attempts = 0;
+          const maxAttempts = 2;
+
+          while (attempts < maxAttempts) {
+            try {
+              whoisData = await whoisJson(hostname, options);
+              if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
+                break;
+              }
+            } catch (e) {
+              console.warn(`[Scanner] WHOIS attempt ${attempts + 1} failed:`, e);
+            }
+            
+            attempts++;
+            // If first attempt with server failed, try without explicit server
+            if (options.server) {
+              delete options.server;
+            }
           }
 
           if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
