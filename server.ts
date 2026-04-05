@@ -517,12 +517,18 @@ async function startServer() {
           if (response.socket && (response.socket as any).getPeerCertificate) {
             const cert = (response.socket as any).getPeerCertificate();
             if (cert && Object.keys(cert).length > 0) {
+              const validTo = new Date(cert.valid_to);
+              const isValid = validTo > new Date();
               results.ssl = {
                 subject: cert.subject,
                 issuer: cert.issuer,
+                valid_from: cert.valid_from,
                 valid_to: cert.valid_to,
-                fingerprint: cert.fingerprint
+                fingerprint: cert.fingerprint,
+                status: isValid ? "Valid" : "Expired/Invalid",
+                vulnerabilities: []
               };
+              if (!isValid) results.ssl.vulnerabilities.push("Certificate is expired");
             }
           }
           resolve(null);
@@ -990,6 +996,61 @@ async function startServer() {
         }
 
         return res.json(dnsRecords);
+
+      case 'ssl':
+        try {
+          const options = {
+            host: hostname,
+            port: 443,
+            method: 'GET',
+            rejectUnauthorized: false,
+            agent: false
+          };
+          
+          const req = https.request(options, (res) => {
+            const cert = (res.socket as any).getPeerCertificate();
+            if (cert && Object.keys(cert).length > 0) {
+              const validTo = new Date(cert.valid_to);
+              const isValid = validTo > new Date();
+              const sslData = {
+                subject: cert.subject,
+                issuer: cert.issuer,
+                valid_from: cert.valid_from,
+                valid_to: cert.valid_to,
+                fingerprint: cert.fingerprint,
+                status: isValid ? "Valid" : "Expired/Invalid",
+                vulnerabilities: []
+              };
+              if (!isValid) sslData.vulnerabilities.push("Certificate is expired");
+              
+              // Check for weak signature algorithm
+              if (cert.sigalg && (cert.sigalg.includes('md5') || cert.sigalg.includes('sha1'))) {
+                sslData.vulnerabilities.push(`Weak signature algorithm: ${cert.sigalg}`);
+                sslData.status = "Insecure";
+              }
+
+              res.destroy();
+              return res.json(sslData);
+            } else {
+              res.destroy();
+              return res.status(404).json({ error: "No certificate found" });
+            }
+          });
+          
+          req.on('error', (e) => {
+            return res.status(500).json({ error: "Failed to connect or retrieve SSL data" });
+          });
+          
+          req.setTimeout(5000, () => {
+            req.destroy();
+            return res.status(504).json({ error: "Timeout retrieving SSL data" });
+          });
+          
+          req.end();
+        } catch (e) {
+          return res.status(500).json({ error: "SSL analysis failed" });
+        }
+        break;
 
       case 'fuzzer':
         const endpoints = ['/admin', '/login', '/api', '/config', '/.env', '/.git', '/backup', '/wp-admin', '/dashboard', '/server-status'];
