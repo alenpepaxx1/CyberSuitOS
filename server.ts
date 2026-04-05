@@ -1023,56 +1023,68 @@ async function startServer() {
 
       case 'whois':
         try {
-          // Use RDAP for WHOIS data
-          const rdapUrl = `https://rdap.org/domain/${hostname}`;
-          const response: any = await new Promise((resolve, reject) => {
-            const req = https.get(rdapUrl, (res) => {
-              let data = '';
-              res.on('data', (chunk) => data += chunk);
-              res.on('end', () => resolve({ statusCode: res.statusCode, data }));
-            });
-            req.on('error', reject);
-            req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
-          });
+          let domainParts = hostname.split('.');
+          let rdapData = null;
+          let finalDomain = hostname;
 
-          if (response.statusCode === 200 && response.data) {
-            const rdapData = JSON.parse(response.data);
-            
-            // Extract Registrar
-            let registrar = "Unknown";
-            const registrarEntity = rdapData.entities?.find((e: any) => e.roles?.includes('registrar'));
-            if (registrarEntity && registrarEntity.vcardArray && registrarEntity.vcardArray[1]) {
-              const fnEntry = registrarEntity.vcardArray[1].find((v: any) => v[0] === 'fn');
-              if (fnEntry) registrar = fnEntry[3];
+          // Try to fetch RDAP, stripping subdomains if we get 404/400
+          while (domainParts.length >= 2) {
+            finalDomain = domainParts.join('.');
+            try {
+              const response = await fetch(`https://rdap.org/domain/${finalDomain}`, {
+                redirect: 'follow',
+                headers: { 
+                  'Accept': 'application/rdap+json',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+                }
+              });
+              if (response.ok) {
+                rdapData = await response.json();
+                break;
+              }
+            } catch (e) {
+              console.warn(`[Scanner] RDAP fetch failed for ${finalDomain}:`, e);
             }
-
-            // Extract Dates
-            const getEventDate = (action: string) => {
-              const event = rdapData.events?.find((e: any) => e.eventAction === action);
-              return event ? event.eventDate : "Unknown";
-            };
-            const creation_date = getEventDate('registration');
-            const expiration_date = getEventDate('expiration');
-            const updated_date = getEventDate('last changed');
-
-            // Extract Name Servers
-            const name_servers = rdapData.nameservers?.map((ns: any) => ns.ldhName) || [];
-
-            const whoisData = {
-              domain: hostname,
-              registrar,
-              creation_date,
-              expiration_date,
-              updated_date,
-              name_servers,
-              status: rdapData.status || [],
-              raw: JSON.stringify(rdapData, null, 2)
-            };
-            return res.json(whoisData);
-          } else {
-            return res.status(response.statusCode === 404 ? 404 : 500).json({ error: "Domain not found or RDAP error" });
+            domainParts.shift(); // Remove the first part (e.g., 'www')
           }
+
+          if (!rdapData) {
+            return res.status(404).json({ error: "Domain not found or RDAP error" });
+          }
+
+          // Extract Registrar
+          let registrar = "Unknown";
+          const registrarEntity = rdapData.entities?.find((e: any) => e.roles?.includes('registrar'));
+          if (registrarEntity && registrarEntity.vcardArray && registrarEntity.vcardArray[1]) {
+            const fnEntry = registrarEntity.vcardArray[1].find((v: any) => v[0] === 'fn');
+            if (fnEntry) registrar = fnEntry[3];
+          }
+
+          // Extract Dates
+          const getEventDate = (action: string) => {
+            const event = rdapData.events?.find((e: any) => e.eventAction === action);
+            return event ? event.eventDate : "Unknown";
+          };
+          const creation_date = getEventDate('registration');
+          const expiration_date = getEventDate('expiration');
+          const updated_date = getEventDate('last changed');
+
+          // Extract Name Servers
+          const name_servers = rdapData.nameservers?.map((ns: any) => ns.ldhName) || [];
+
+          const whoisData = {
+            domain: finalDomain,
+            registrar,
+            creation_date,
+            expiration_date,
+            updated_date,
+            name_servers,
+            status: rdapData.status || [],
+            raw: JSON.stringify(rdapData, null, 2)
+          };
+          return res.json(whoisData);
         } catch (e) {
+          console.error("[Scanner] Whois error:", e);
           return res.status(500).json({ error: "Whois lookup failed" });
         }
 
