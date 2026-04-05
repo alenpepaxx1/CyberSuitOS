@@ -487,10 +487,24 @@ async function startServer() {
         domainParts.shift(); // Remove the first part (e.g., 'www')
       }
 
+      if (rdapData) {
+        return {
+          domain: finalDomain,
+          registrar: rdapData.entities?.[0]?.vcardArray?.[1]?.[1]?.[3]?.[3] || "Unknown",
+          registrant: "Unknown",
+          creationDate: rdapData.events?.find((e: any) => e.eventAction === 'registration')?.eventDate || "Unknown",
+          expiryDate: rdapData.events?.find((e: any) => e.eventAction === 'expiration')?.eventDate || "Unknown",
+          updatedDate: rdapData.events?.find((e: any) => e.eventAction === 'last changed')?.eventDate || "Unknown",
+          nameServers: rdapData.nameservers?.map((ns: any) => ns.ldhName) || [],
+          status: rdapData.status || [],
+          raw: JSON.stringify(rdapData, null, 2)
+        };
+      }
+
       if (!rdapData) {
         // Fallback to whois-json if RDAP fails or is not supported for TLD
         try {
-          const whoisJson = require('whois-json');
+          const whoisJson = require('whois-json').default || require('whois-json');
           let options: any = { timeout: 10000 }; // Set a 10s timeout for each attempt
           if (hostname.endsWith('.al')) {
             options.server = 'whois.nic.al'; 
@@ -529,6 +543,7 @@ async function startServer() {
                raw: JSON.stringify(whoisData, null, 2)
              };
           }
+          return null;
         } catch (e) {
            console.warn("[Scanner] whois-json fallback failed", e);
         }
@@ -1173,12 +1188,16 @@ async function startServer() {
           await Promise.all(recordTypes.map(async ({ type, label }) => {
             try {
               const method = dns.promises[type] as Function;
-              const result = await method(host);
+              // Add a 3s timeout for each DNS lookup
+              const result = await Promise.race([
+                method(host),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+              ]);
               if (result && (Array.isArray(result) ? result.length > 0 : true)) {
                 dnsRecords[label] = result;
               }
             } catch (e) {
-              // Record type not found
+              // Record type not found or timeout
             }
           }));
         };
@@ -1193,17 +1212,22 @@ async function startServer() {
 
         // Add basic lookup if still nothing or as extra info
         try {
-          const lookup = await dns.promises.lookup(hostname);
+          // Add a 3s timeout for basic lookup
+          const lookup = await Promise.race([
+            dns.promises.lookup(hostname),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+          ]) as any;
+          
           if (lookup && !dnsRecords['A'] && !dnsRecords['AAAA']) {
             dnsRecords['IP Lookup'] = [lookup.address];
           }
         } catch (e) {}
 
-        // If still empty, provide a "No Records" message
         if (Object.keys(dnsRecords).length === 0) {
-          dnsRecords['Status'] = ["No public DNS records found for this target."];
+          dnsRecords['Status'] = ['No DNS records found or lookup timed out.'];
         }
 
+        console.log(`[Scanner] DNS lookup for ${hostname} complete. Found ${Object.keys(dnsRecords).length} record types.`);
         return res.json(dnsRecords);
 
       case 'ssl':
