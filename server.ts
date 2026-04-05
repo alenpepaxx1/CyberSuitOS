@@ -677,7 +677,7 @@ async function startServer() {
           const scanPort = (port: number) => {
             return new Promise((resolve) => {
               const socket = new net.Socket();
-              socket.setTimeout(1500);
+              socket.setTimeout(3000);
               socket.on('connect', () => {
                 results.ports.push({ port, status: 'open', service: getServiceName(port) });
                 socket.destroy();
@@ -973,10 +973,12 @@ async function startServer() {
               if (resolvedSubs.has(domain)) return;
               try {
                 // Add a 2s timeout for each DNS lookup to prevent hanging
+                console.log(`[Scanner] Resolving subdomain: ${domain}`);
                 const lookup = await Promise.race([
                   dns.promises.lookup(domain),
                   new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
                 ]) as any;
+                console.log(`[Scanner] Resolved ${domain}:`, lookup);
                 
                 if (lookup && lookup.address) {
                   foundSubdomains.push({ 
@@ -1086,6 +1088,7 @@ async function startServer() {
             const socket = new net.Socket();
             socket.setTimeout(1500);
             socket.on('connect', () => {
+              console.log(`[Scanner] Port ${port} is open on ${hostname}`);
               portResults.push({ 
                 port, 
                 service: getServiceName(port), 
@@ -1097,11 +1100,13 @@ async function startServer() {
               resolve(null);
             });
             socket.on('timeout', () => {
+              console.log(`[Scanner] Port ${port} timed out on ${hostname}`);
               portResults.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
               socket.destroy();
               resolve(null);
             });
-            socket.on('error', () => {
+            socket.on('error', (err) => {
+              console.log(`[Scanner] Port ${port} error on ${hostname}:`, err.message);
               portResults.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
               socket.destroy();
               resolve(null);
