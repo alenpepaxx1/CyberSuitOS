@@ -945,14 +945,37 @@ async function startServer() {
           }
         };
 
-        // 3. Start crt.sh fetch and dictionary resolution in parallel
+        // 3. Start crt.sh fetch, HackerTarget fetch, and dictionary resolution in parallel
         console.log(`[Scanner] Starting parallel subdomain discovery for ${searchDomain}...`);
         
+        const hackerTargetPromise = (async () => {
+          try {
+            const htUrl = `https://api.hackertarget.com/hostsearch/?q=${searchDomain}`;
+            const response = await axios.get(htUrl, { timeout: 8000 });
+            if (response.status === 200 && typeof response.data === 'string') {
+              const lines = response.data.split('\n');
+              const newSubs = new Set<string>();
+              lines.forEach(line => {
+                const parts = line.split(',');
+                if (parts[0] && parts[0].endsWith(searchDomain)) {
+                  newSubs.add(parts[0].toLowerCase());
+                }
+              });
+              if (newSubs.size > 0) {
+                console.log(`[Scanner] HackerTarget found ${newSubs.size} unique subdomains, resolving...`);
+                await resolveBatch(Array.from(newSubs));
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[Scanner] HackerTarget fetch skipped/failed (${e.message}).`);
+          }
+        })();
+
         const crtShPromise = (async () => {
           try {
             const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
             const response = await axios.get(crtUrl, {
-              timeout: 15000, // 15s is a good middle ground
+              timeout: 30000, // Increased to 30s as crt.sh is often slow
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
               },
@@ -984,9 +1007,10 @@ async function startServer() {
           }
         })();
 
-        // Run both dictionary resolution and crt.sh discovery in parallel
+        // Run all discovery methods in parallel
         await Promise.all([
           resolveBatch(dictionarySubs),
+          hackerTargetPromise,
           crtShPromise
         ]);
 
