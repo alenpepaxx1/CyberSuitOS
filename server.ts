@@ -864,124 +864,93 @@ async function startServer() {
 
         const foundSubdomains: any[] = [];
         const uniqueSubs = new Set<string>();
+        const resolvedSubs = new Set<string>();
 
-        // 1. Try crt.sh for accurate subdomains
-        try {
-          console.log(`[Scanner] Fetching subdomains from crt.sh for ${searchDomain}...`);
-          const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
-          const crtResponse: any = await new Promise((resolve, reject) => {
-            const options = {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-              }
-            };
-            const req = https.get(crtUrl, options, (res) => {
-              let data = '';
-              res.on('data', chunk => data += chunk);
-              res.on('end', () => resolve({ statusCode: res.statusCode, data }));
-            });
-            req.on('error', reject);
-            // crt.sh can be very slow, increase timeout to 30 seconds
-            req.setTimeout(30000, () => { 
-              req.destroy(); 
-              reject(new Error('Timeout after 30s')); 
-            });
-          });
-
-          if (crtResponse.statusCode === 200 && crtResponse.data) {
-            const certs = JSON.parse(crtResponse.data);
-            if (Array.isArray(certs)) {
-              console.log(`[Scanner] crt.sh returned ${certs.length} certificates for ${searchDomain}`);
-              certs.forEach((cert: any) => {
-                const nameValue = cert.name_value.toLowerCase();
-                nameValue.split('\n').forEach((sub: string) => {
-                  if (!sub.includes('*') && sub.endsWith(searchDomain)) {
-                    uniqueSubs.add(sub);
-                  }
-                });
-              });
-            } else {
-              console.warn(`[Scanner] crt.sh returned non-array data for ${searchDomain}`);
-            }
-          } else {
-            console.warn(`[Scanner] crt.sh returned status ${crtResponse.statusCode} for ${searchDomain}`);
-          }
-        } catch (e: any) {
-          console.warn(`[Scanner] crt.sh fetch skipped/failed (${e.message}). Falling back to dictionary brute-force only.`);
-        }
-
-        // 2. Add common subdomains to check
+        // 1. Common subdomains dictionary
         const commonSubs = [
           'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
           'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
           'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
-          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff'
+          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
+          'ftp', 'smtp', 'pop', 'imap', 'webmail', 'autodiscover', 'cpanel', 'whm', 'webdisk',
+          'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage'
         ];
         
-        commonSubs.forEach(sub => uniqueSubs.add(`${sub}.${searchDomain}`));
-        uniqueSubs.add(searchDomain);
+        const dictionarySubs = commonSubs.map(sub => `${sub}.${searchDomain}`);
+        dictionarySubs.push(searchDomain);
 
-        const subsToCheck = Array.from(uniqueSubs);
-        console.log(`[Scanner] Checking ${subsToCheck.length} potential subdomains for ${searchDomain}...`);
-        const batchSize = 20;
-        
-        for (let i = 0; i < subsToCheck.length; i += batchSize) {
-          const batch = subsToCheck.slice(i, i + batchSize);
-          await Promise.all(batch.map(async (domain) => {
-            try {
-              let ip = '';
-              let type = 'A';
-              
-              // Try IPv4 first
+        // 2. Start resolving dictionary subdomains immediately
+        const resolveBatch = async (subs: string[]) => {
+          const batchSize = 100;
+          for (let i = 0; i < subs.length; i += batchSize) {
+            const batch = subs.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (domain) => {
+              if (resolvedSubs.has(domain)) return;
               try {
-                const addrs = await dns.promises.resolve4(domain);
-                if (addrs && addrs.length > 0) {
-                  ip = addrs[0];
+                const lookup = await dns.promises.lookup(domain);
+                if (lookup && lookup.address) {
+                  foundSubdomains.push({ 
+                    subdomain: domain, 
+                    ip: lookup.address, 
+                    status: 'up', 
+                    type: lookup.family === 6 ? 'AAAA' : 'A',
+                    last_seen: new Date().toISOString()
+                  });
                 }
-              } catch (e) {
-                // Try IPv6 if IPv4 fails
-                try {
-                  const addrs6 = await dns.promises.resolve6(domain);
-                  if (addrs6 && addrs6.length > 0) {
-                    ip = addrs6[0];
-                    type = 'AAAA';
-                  }
-                } catch (e2) {
-                  // Final fallback: use system lookup (getaddrinfo)
-                  try {
-                    const lookup = await dns.promises.lookup(domain);
-                    if (lookup && lookup.address) {
-                      ip = lookup.address;
-                      type = lookup.family === 6 ? 'AAAA' : 'A';
-                    }
-                  } catch (e3) {}
-                }
-              }
-
-              if (ip) {
-                foundSubdomains.push({ 
-                  subdomain: domain, 
-                  ip: ip, 
-                  status: 'up', 
-                  type: type,
-                  last_seen: new Date().toISOString()
-                });
-              }
-            } catch (e) {
-              // Not found or error
-            }
-          }));
-          // Small delay between batches to avoid overwhelming DNS
-          if (i + batchSize < subsToCheck.length) {
-            await new Promise(r => setTimeout(r, 50));
+              } catch (e) {}
+              resolvedSubs.add(domain);
+            }));
           }
-        }
+        };
+
+        // 3. Start crt.sh fetch and dictionary resolution in parallel
+        console.log(`[Scanner] Starting parallel subdomain discovery for ${searchDomain}...`);
+        
+        const crtShPromise = (async () => {
+          try {
+            const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
+            const response = await axios.get(crtUrl, {
+              timeout: 8000, // Reduced to 8s for even faster response
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              },
+              validateStatus: () => true
+            });
+
+            if (response.status === 200 && response.data) {
+              const certs = response.data;
+              if (Array.isArray(certs)) {
+                const newSubs: string[] = [];
+                certs.forEach((cert: any) => {
+                  const nameValue = cert.name_value.toLowerCase();
+                  nameValue.split('\n').forEach((sub: string) => {
+                    if (!sub.includes('*') && sub.endsWith(searchDomain) && !resolvedSubs.has(sub)) {
+                      newSubs.push(sub);
+                    }
+                  });
+                });
+                if (newSubs.length > 0) {
+                  console.log(`[Scanner] crt.sh found ${newSubs.length} unique subdomains, resolving...`);
+                  await resolveBatch(newSubs);
+                }
+              }
+            }
+          } catch (e: any) {
+            console.warn(`[Scanner] crt.sh fetch skipped/failed (${e.message}).`);
+          }
+        })();
+
+        // Resolve dictionary subdomains first
+        await resolveBatch(dictionarySubs);
+        
+        // Wait for crt.sh to finish its part
+        await crtShPromise;
 
         if (foundSubdomains.length === 0) {
           console.warn(`[Scanner] No subdomains found for ${searchDomain}. Using fallback.`);
           foundSubdomains.push({ subdomain: searchDomain, ip: 'Unknown', status: 'down', type: 'A' });
         } else {
-          console.log(`[Scanner] Found ${foundSubdomains.length} subdomains for ${searchDomain}.`);
+          console.log(`[Scanner] Found ${foundSubdomains.length} total subdomains for ${searchDomain}.`);
         }
         
         // Sort by subdomain name
