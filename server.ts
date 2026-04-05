@@ -894,7 +894,12 @@ async function startServer() {
           'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
           'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
           'ftp', 'smtp', 'pop', 'imap', 'webmail', 'autodiscover', 'cpanel', 'whm', 'webdisk',
-          'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage'
+          'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage',
+          'git', 'svn', 'dev-api', 'api-dev', 'test-api', 'api-test', 'v1', 'v2', 'v3',
+          'status', 'monitor', 'monitoring', 'zabbix', 'nagios', 'grafana', 'prometheus',
+          'jenkins', 'gitlab', 'docker', 'registry', 'k8s', 'kubernetes', 'cluster',
+          'db', 'database', 'sql', 'mysql', 'postgres', 'redis', 'elastic', 'mongo',
+          'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2'
         ];
         
         const dictionarySubs = commonSubs.map(sub => `${sub}.${searchDomain}`);
@@ -931,7 +936,7 @@ async function startServer() {
           try {
             const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
             const response = await axios.get(crtUrl, {
-              timeout: 20000, // Increased to 20s for better reliability
+              timeout: 15000, // 15s is a good middle ground
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
               },
@@ -941,18 +946,20 @@ async function startServer() {
             if (response.status === 200 && response.data) {
               const certs = response.data;
               if (Array.isArray(certs)) {
-                const newSubs: string[] = [];
+                const newSubs = new Set<string>();
                 certs.forEach((cert: any) => {
                   const nameValue = cert.name_value.toLowerCase();
                   nameValue.split('\n').forEach((sub: string) => {
-                    if (!sub.includes('*') && sub.endsWith(searchDomain) && !resolvedSubs.has(sub)) {
-                      newSubs.push(sub);
+                    const cleanSub = sub.trim();
+                    if (cleanSub && !cleanSub.includes('*') && cleanSub.endsWith(searchDomain) && !resolvedSubs.has(cleanSub)) {
+                      newSubs.add(cleanSub);
                     }
                   });
                 });
-                if (newSubs.length > 0) {
-                  console.log(`[Scanner] crt.sh found ${newSubs.length} unique subdomains, resolving...`);
-                  await resolveBatch(newSubs);
+                
+                if (newSubs.size > 0) {
+                  console.log(`[Scanner] crt.sh found ${newSubs.size} unique subdomains, resolving...`);
+                  await resolveBatch(Array.from(newSubs));
                 }
               }
             }
@@ -961,11 +968,11 @@ async function startServer() {
           }
         })();
 
-        // Resolve dictionary subdomains first
-        await resolveBatch(dictionarySubs);
-        
-        // Wait for crt.sh to finish its part
-        await crtShPromise;
+        // Run both dictionary resolution and crt.sh discovery in parallel
+        await Promise.all([
+          resolveBatch(dictionarySubs),
+          crtShPromise
+        ]);
 
         if (foundSubdomains.length === 0) {
           console.warn(`[Scanner] No subdomains found for ${searchDomain}. Using fallback.`);
