@@ -897,12 +897,14 @@ async function startServer() {
 
       case 'headers':
         try {
-          const protocol = target.startsWith('https') ? https : http;
+          const isHttps = target.startsWith('https');
+          const protocol = isHttps ? https : http;
           const url = target.startsWith('http') ? target : `http://${target}`;
           const response: any = await new Promise((resolve, reject) => {
-            const req = protocol.get(url, resolve);
+            const options = isHttps ? { rejectUnauthorized: false } : {};
+            const req = protocol.get(url, options, resolve);
             req.on('error', reject);
-            req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
+            req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
           });
           
           const headers = response.headers;
@@ -1007,8 +1009,8 @@ async function startServer() {
             agent: false
           };
           
-          const req = https.request(options, (res) => {
-            const cert = (res.socket as any).getPeerCertificate();
+          const req = https.request(options, (httpsRes) => {
+            const cert = (httpsRes.socket as any).getPeerCertificate();
             if (cert && Object.keys(cert).length > 0) {
               const validTo = new Date(cert.valid_to);
               const isValid = validTo > new Date();
@@ -1029,10 +1031,10 @@ async function startServer() {
                 sslData.status = "Insecure";
               }
 
-              res.destroy();
+              httpsRes.destroy();
               return res.json(sslData);
             } else {
-              res.destroy();
+              httpsRes.destroy();
               return res.status(404).json({ error: "No certificate found" });
             }
           });
@@ -1092,7 +1094,7 @@ async function startServer() {
           while (domainParts.length >= 2) {
             finalDomain = domainParts.join('.');
             try {
-              const response = await fetch(`https://rdap.org/domain/${finalDomain}`, {
+              const response = await fetch(`https://www.rdap.net/domain/${finalDomain}`, {
                 redirect: 'follow',
                 headers: { 
                   'Accept': 'application/rdap+json',
@@ -1241,12 +1243,14 @@ async function startServer() {
 
       case 'tech':
         try {
-          const protocol = target.startsWith('https') ? https : http;
+          const isHttps = target.startsWith('https');
+          const protocol = isHttps ? https : http;
           const url = target.startsWith('http') ? target : `http://${target}`;
           const response: any = await new Promise((resolve, reject) => {
-            const req = protocol.get(url, resolve);
+            const options = isHttps ? { rejectUnauthorized: false } : {};
+            const req = protocol.get(url, options, resolve);
             req.on('error', reject);
-            req.setTimeout(3000, () => { req.destroy(); reject(new Error('Timeout')); });
+            req.setTimeout(10000, () => { req.destroy(); reject(new Error('Timeout')); });
           });
           
           const tech: any[] = [];
