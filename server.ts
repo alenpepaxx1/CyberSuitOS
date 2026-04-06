@@ -522,8 +522,11 @@ async function startServer() {
               if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
                 break;
               }
-            } catch (e) {
-              console.warn(`[Scanner] WHOIS attempt ${attempts + 1} failed:`, e);
+            } catch (e: any) {
+              // Only log if it's the last attempt to reduce noise
+              if (attempts === maxAttempts - 1) {
+                // console.warn(`[Scanner] WHOIS attempt ${attempts + 1} failed:`, e.message);
+              }
             }
             
             attempts++;
@@ -536,18 +539,18 @@ async function startServer() {
           if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
              return {
                domain: hostname,
-               registrar: whoisData.registrar || "Unknown",
-               registrant: whoisData.registrant || whoisData.registrantName || "Unknown",
-               creationDate: whoisData.creationDate || "Unknown",
-               expiryDate: whoisData.registrarRegistrationExpirationDate || whoisData.registryExpiryDate || "Unknown",
-               updatedDate: whoisData.updatedDate || "Unknown",
+               registrar: whoisData.registrar || whoisData.Registrar || "Unknown",
+               registrant: whoisData.registrant || whoisData.registrantName || whoisData.Registrant || "Unknown",
+               creationDate: whoisData.creationDate || whoisData.CreationDate || "Unknown",
+               expiryDate: whoisData.registrarRegistrationExpirationDate || whoisData.registryExpiryDate || whoisData.RegistryExpiryDate || "Unknown",
+               updatedDate: whoisData.updatedDate || whoisData.UpdatedDate || "Unknown",
                nameServers: whoisData.nameServer ? (Array.isArray(whoisData.nameServer) ? whoisData.nameServer : whoisData.nameServer.split(' ')) : [],
                raw: JSON.stringify(whoisData, null, 2)
              };
           }
           return null;
         } catch (e) {
-           console.warn("[Scanner] whois-json fallback failed", e);
+           // Suppress fallback errors
         }
         return null;
       }
@@ -1054,7 +1057,7 @@ async function startServer() {
           try {
             const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
             const response = await axios.get(crtUrl, {
-              timeout: 30000, // Increased to 30s as crt.sh is often slow
+              timeout: 10000, // Reduced to 10s to prevent long hangs
               headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
               },
@@ -1082,7 +1085,7 @@ async function startServer() {
               }
             }
           } catch (e: any) {
-            console.warn(`[Scanner] crt.sh fetch skipped/failed (${e.message}).`);
+            // Suppress crt.sh timeout/failure warnings to reduce log noise
           }
         })();
 
@@ -1366,12 +1369,22 @@ async function startServer() {
 
       case 'whois':
         try {
-          const whois = require('whois-json');
-          const whoisData = await whois(hostname);
-          if (whoisData && Object.keys(whoisData).length > 0) {
+          const whoisData = await performWhoisLookup(hostname);
+          if (whoisData) {
             result = whoisData;
           } else {
-            return res.status(404).json({ error: "WHOIS data not available." });
+            // Provide a graceful fallback if WHOIS completely fails
+            result = {
+              domain: hostname,
+              registrar: "Unknown",
+              registrant: "Unknown",
+              creationDate: "Unknown",
+              expiryDate: "Unknown",
+              updatedDate: "Unknown",
+              nameServers: [],
+              status: ["Unknown"],
+              raw: "WHOIS data could not be retrieved for this domain or IP."
+            };
           }
         } catch (e) {
           return res.status(500).json({ error: "WHOIS lookup failed." });
