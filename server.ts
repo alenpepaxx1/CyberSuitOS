@@ -1329,9 +1329,27 @@ async function startServer() {
 
       case 'dns':
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          const os = await import('os');
+          const networkInterfaces = os.networkInterfaces();
+          const localIps = Object.values(networkInterfaces)
+            .flat()
+            .filter((details: any) => details.family === 'IPv4' && !details.internal)
+            .map((details: any) => details.address);
+
           result = {
-            'A': ['127.0.0.1'],
-            'Status': ['Localhost detected - Standard DNS resolution skipped.']
+            records: {
+              'A': ['127.0.0.1'],
+              'Local IPs': localIps,
+              'Hostname': [os.hostname()],
+              'Platform': [os.platform()],
+              'Status': ['Localhost detected - Standard DNS resolution skipped.']
+            },
+            security: {
+              'DNSSEC': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'SPF': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'DMARC': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'CAA': { status: 'n/a', detail: 'Not applicable for localhost' }
+            }
           };
           break;
         }
@@ -1354,12 +1372,12 @@ async function startServer() {
             try {
               const method = dns.promises[type] as Function;
               // Add a 3s timeout for each DNS lookup
-              const result = await Promise.race([
+              const res = await Promise.race([
                 method(host),
                 new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
               ]);
-              if (result && (Array.isArray(result) ? result.length > 0 : true)) {
-                dnsRecords[label] = result;
+              if (res && (Array.isArray(res) ? res.length > 0 : true)) {
+                dnsRecords[label] = res;
               }
             } catch (e) {
               // Record type not found or timeout
@@ -1375,25 +1393,63 @@ async function startServer() {
           await resolveDNS(rootDomain);
         }
 
-        // Add basic lookup if still nothing or as extra info
-        try {
-          // Add a 3s timeout for basic lookup
-          const lookup = await Promise.race([
-            dns.promises.lookup(hostname),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-          ]) as any;
-          
-          if (lookup && !dnsRecords['A'] && !dnsRecords['AAAA']) {
-            dnsRecords['IP Lookup'] = [lookup.address];
-          }
-        } catch (e) {}
+        // Security Analysis
+        const securityAnalysis: any = {
+          'DNSSEC': { status: 'unknown', detail: 'Could not verify DNSSEC status.' },
+          'SPF': { status: 'missing', detail: 'No SPF record found. Risk of email spoofing.' },
+          'DMARC': { status: 'missing', detail: 'No DMARC record found. Risk of domain impersonation.' },
+          'CAA': { status: 'missing', detail: 'No CAA record found. Any CA can issue certificates for this domain.' }
+        };
 
-        if (Object.keys(dnsRecords).length === 0) {
-          dnsRecords['Status'] = ['No DNS records found or lookup timed out.'];
+        // Analyze TXT records for SPF and DMARC
+        if (dnsRecords['TXT']) {
+          const txtRecords = dnsRecords['TXT'].flat();
+          const spf = txtRecords.find((r: string) => r.startsWith('v=spf1'));
+          if (spf) {
+            securityAnalysis['SPF'] = { 
+              status: 'secure', 
+              detail: 'SPF record detected.',
+              value: spf
+            };
+          }
+
+          // DMARC is usually on _dmarc.domain
+          try {
+            const dmarcRes = await dns.promises.resolveTxt(`_dmarc.${hostname}`);
+            const dmarc = dmarcRes.flat().find((r: string) => r.startsWith('v=DMARC1'));
+            if (dmarc) {
+              securityAnalysis['DMARC'] = { 
+                status: 'secure', 
+                detail: 'DMARC record detected.',
+                value: dmarc
+              };
+            }
+          } catch (e) {
+            // No DMARC
+          }
         }
 
-        console.log(`[Scanner] DNS lookup for ${hostname} complete. Found ${Object.keys(dnsRecords).length} record types.`);
-        result = dnsRecords;
+        // Analyze CAA
+        if (dnsRecords['CAA']) {
+          securityAnalysis['CAA'] = { 
+            status: 'secure', 
+            detail: 'CAA records found, restricting certificate issuance.',
+            value: JSON.stringify(dnsRecords['CAA'])
+          };
+        }
+
+        // DNSSEC check (simplified)
+        if (dnsRecords['SOA']) {
+          securityAnalysis['DNSSEC'] = { 
+            status: 'info', 
+            detail: 'SOA record present. DNSSEC requires deeper inspection of RRSIG/DNSKEY records.' 
+          };
+        }
+
+        result = {
+          records: dnsRecords,
+          security: securityAnalysis
+        };
         break;
 
       case 'ssl':
