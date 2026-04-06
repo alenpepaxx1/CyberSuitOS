@@ -38,6 +38,9 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
   const containerRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
 
+  const nodesRef = useRef<MapItem[]>([]);
+  const attacksRef = useRef<any[]>([]);
+
   // High-frequency "Live" simulation for visual activity
   useEffect(() => {
     if (nodes.length < 2) return;
@@ -45,15 +48,15 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
     const interval = setInterval(() => {
       setActiveAttacks(prev => {
         const now = Date.now();
-        // Remove attacks older than 4 seconds to make it feel like a steady, realistic flow
-        let updated = prev.filter(a => !a.isSimulated || (now - (a.timestamp || now)) < 4000);
+        // Remove attacks older than 3 seconds
+        let updated = prev.filter(a => !a.isSimulated || (now - (a.timestamp || now)) < 3000);
 
-        // Add 1-2 new attacks per tick
-        const numToAdd = Math.floor(Math.random() * 2) + 1;
+        // Add 2-4 new attacks per tick
+        const numToAdd = Math.floor(Math.random() * 3) + 2;
         const newAttacks = [];
         
         for (let i = 0; i < numToAdd; i++) {
-          if (updated.length + newAttacks.length < 35) { // Cap at 35 for readability
+          if (updated.length + newAttacks.length < 50) { 
             const from = nodes[Math.floor(Math.random() * nodes.length)];
             const to = nodes[Math.floor(Math.random() * nodes.length)];
             if (from.id !== to.id) {
@@ -68,9 +71,11 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
           }
         }
         
-        return [...updated, ...newAttacks];
+        const nextAttacks = [...updated, ...newAttacks];
+        attacksRef.current = nextAttacks;
+        return nextAttacks;
       });
-    }, 1200); // 1.2 seconds for a more "normal but true" pace
+    }, 800); 
 
     return () => clearInterval(interval);
   }, [nodes]);
@@ -81,510 +86,233 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
       .catch(err => console.error('Failed to load map data:', err));
   }, []);
 
+  // Initialize nodes
   useEffect(() => {
-    if (!svgRef.current || !mapData) return;
+    let generatedNodes: MapItem[] = [];
+    if (initialNodes && initialNodes.length > 0) {
+      generatedNodes = initialNodes.map((node, i) => ({
+        ...node,
+        id: node.id || `node-${i}`,
+        status: node.status || 'active',
+        lastSeen: node.lastSeen || 'Just now',
+        reputation: node.reputation ?? Math.floor(Math.random() * 100)
+      }));
+    } else if (initialNodes && initialNodes.length === 0) {
+      generatedNodes = [];
+    } else {
+      const locations = [
+        { long: -74.006, lat: 40.7128, city: 'New York', country: 'USA' },
+        { long: 0.1278, lat: 51.5074, city: 'London', country: 'UK' },
+        { long: 139.6503, lat: 35.6762, city: 'Tokyo', country: 'Japan' },
+        { long: 37.6173, lat: 55.7558, city: 'Moscow', country: 'Russia' },
+        { long: 116.4074, lat: 39.9042, city: 'Beijing', country: 'China' },
+        { long: 151.2093, lat: -33.8688, city: 'Sydney', country: 'Australia' },
+        { long: -43.1729, lat: -22.9068, city: 'Rio de Janeiro', country: 'Brazil' },
+        { long: 18.4241, lat: -33.9249, city: 'Cape Town', country: 'South Africa' },
+        { long: 77.209, lat: 28.6139, city: 'New Delhi', country: 'India' },
+        { long: 103.8198, lat: 1.3521, city: 'Singapore', country: 'Singapore' },
+        { long: -122.4194, lat: 37.7749, city: 'San Francisco', country: 'USA' },
+        { long: 2.3522, lat: 48.8566, city: 'Paris', country: 'France' },
+        { long: 12.4964, lat: 41.9028, city: 'Rome', country: 'Italy' },
+        { long: 55.2708, lat: 25.2048, city: 'Dubai', country: 'UAE' },
+        { long: 121.4737, lat: 31.2304, city: 'Shanghai', country: 'China' },
+        { long: 100.5018, lat: 13.7563, city: 'Bangkok', country: 'Thailand' },
+        { long: 28.9784, lat: 41.0082, city: 'Istanbul', country: 'Turkey' },
+        { long: -58.3816, lat: -34.6037, city: 'Buenos Aires', country: 'Argentina' },
+        { long: 3.3792, lat: 6.5244, city: 'Lagos', country: 'Nigeria' },
+        { long: 36.8219, lat: -1.2921, city: 'Nairobi', country: 'Kenya' },
+        { long: 13.4050, lat: 52.5200, city: 'Berlin', country: 'Germany' },
+        { long: 30.5234, lat: 50.4501, city: 'Kyiv', country: 'Ukraine' },
+      ];
+
+      generatedNodes = locations.map((loc, i) => {
+        const type = Math.random() > 0.7 ? 'attack' : 'node';
+        return {
+          id: `node-${i}`,
+          ...loc,
+          type,
+          ip: `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
+          threatLevel: ['low', 'medium', 'high', 'critical'][Math.floor(Math.random() * 4)] as any,
+          status: Math.random() > 0.8 ? 'compromised' : Math.random() > 0.5 ? 'active' : 'secure',
+          lastSeen: 'Just now',
+          attackType: type === 'attack' ? ['DDoS', 'SQL Injection', 'Brute Force', 'Malware C2'][Math.floor(Math.random() * 4)] : undefined,
+          targetedPorts: type === 'attack' ? [80, 443, 22, 3389].sort(() => Math.random() - 0.5).slice(0, 2) : undefined,
+          reputation: Math.floor(Math.random() * 100)
+        };
+      });
+    }
+
+    setNodes(generatedNodes);
+    nodesRef.current = generatedNodes;
+  }, [initialNodes]);
+
+  // Main D3 Render
+  useEffect(() => {
+    if (!svgRef.current || !mapData || nodes.length === 0) return;
 
     const width = 800;
-    const height = 300;
+    const height = 450;
     const svg = d3.select(svgRef.current)
       .attr('viewBox', `0 0 ${width} ${height}`)
       .attr('preserveAspectRatio', 'xMidYMid meet');
 
+    svg.selectAll('*').remove();
+
+    // 3D Orthographic Projection
+    const projection = d3.geoOrthographic()
+      .scale(200)
+      .translate([width / 2, height / 2])
+      .clipAngle(90);
+
+    const path = d3.geoPath().projection(projection);
+
     // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([1, 8])
+      .scaleExtent([0.5, 8])
       .on('zoom', (event) => {
-        svg.selectAll('g').attr('transform', event.transform);
+        svgGroup.attr('transform', event.transform);
       });
 
     zoomRef.current = zoom;
     svg.call(zoom);
 
-    // Clear previous
-    svg.selectAll('*').remove();
+    const svgGroup = svg.append('g');
 
-    // Projection
-    const projection = d3.geoMercator()
-      .scale(120)
-      .translate([width / 2, height / 1.5]);
+    // Ocean / Globe background
+    svgGroup.append('circle')
+      .attr('cx', width / 2)
+      .attr('cy', height / 2)
+      .attr('r', projection.scale())
+      .attr('fill', '#050505')
+      .attr('stroke', '#00ff41')
+      .attr('stroke-width', 0.5)
+      .attr('opacity', 0.3)
+      .style('filter', 'drop-shadow(0 0 20px rgba(0,255,65,0.1))');
 
-    const path = d3.geoPath().projection(projection);
-
-    // 0. Draw Coordinate Grid & Radar
-    const gridGroup = svg.append('g').attr('class', 'grid-lines').attr('opacity', 0.05);
+    // Graticule (Grid)
     const graticule = d3.geoGraticule();
-    gridGroup.append('path')
+    const gridPath = svgGroup.append('path')
       .datum(graticule)
       .attr('class', 'graticule')
-      .attr('d', path as any)
       .attr('fill', 'none')
       .attr('stroke', '#00ff41')
-      .attr('stroke-width', 0.5);
+      .attr('stroke-width', 0.2)
+      .attr('opacity', 0.3);
 
-    // Radar Sweep
-    const radarGroup = svg.append('g').attr('class', 'radar-sweep');
-    const defs = svg.append('defs');
-    
-    const radarLinear = defs.append('linearGradient')
-      .attr('id', 'radar-gradient-linear')
-      .attr('x1', '0%').attr('y1', '100%')
-      .attr('x2', '0%').attr('y2', '0%');
-    radarLinear.append('stop').attr('offset', '0%').attr('stop-color', '#00ff41').attr('stop-opacity', 0.8);
-    radarLinear.append('stop').attr('offset', '100%').attr('stop-color', '#00ff41').attr('stop-opacity', 0);
-
-    // Radar arc (simulating the sweep trail)
-    const arcGenerator = d3.arc()
-      .innerRadius(0)
-      .outerRadius(height)
-      .startAngle(0)
-      .endAngle(Math.PI / 4); // 45 degrees sweep
-
-    const radarArc = radarGroup.append('path')
-      .attr('d', arcGenerator as any)
-      .attr('fill', 'url(#radar-gradient-linear)')
-      .attr('opacity', 0.15)
-      .attr('transform', `translate(${width/2}, ${height/2})`);
-
-    const radarLine = radarGroup.append('line')
-      .attr('x1', width / 2)
-      .attr('y1', height / 2)
-      .attr('x2', width / 2)
-      .attr('y2', -height)
-      .attr('stroke', '#00ff41')
-      .attr('stroke-width', 1.5)
-      .attr('opacity', 0.8)
-      .style('filter', 'drop-shadow(0 0 4px #00ff41)');
-
-    const animateRadar = () => {
-      radarGroup
-        .attr('transform', `rotate(0, ${width/2}, ${height/2})`)
-        .transition()
-        .duration(4000)
-        .ease(d3.easeLinear)
-        .attr('transform', `rotate(360, ${width/2}, ${height/2})`)
-        .on('end', animateRadar);
-    };
-    animateRadar();
-
-    // Draw world map (simplified)
+    // Countries
     const countries = topojson.feature(mapData, mapData.objects.countries) as any;
+    const countryPaths = svgGroup.append('g').attr('class', 'countries')
+      .selectAll('path')
+      .data(countries.features)
+      .enter()
+      .append('path')
+      .attr('fill', '#0a0a0a')
+      .attr('stroke', '#00ff41')
+      .attr('stroke-width', 0.5)
+      .attr('stroke-opacity', 0.5)
+      .attr('class', 'country-path');
 
-    // 1. Generate Nodes
-        let generatedNodes: MapItem[] = [];
-        if (initialNodes && initialNodes.length > 0) {
-          generatedNodes = initialNodes.map((node, i) => ({
-            ...node,
-            id: node.id || `node-${i}`,
-            status: node.status || 'active',
-            lastSeen: node.lastSeen || 'Just now',
-            reputation: node.reputation ?? Math.floor(Math.random() * 100)
-          }));
-        } else if (initialNodes && initialNodes.length === 0) {
-          // If explicitly empty, we still want to show the map but maybe fewer random nodes
-          generatedNodes = [];
-        } else {
-          // Fallback random nodes if initialNodes is undefined
-          const locations = [
-            { long: -74.006, lat: 40.7128, city: 'New York', country: 'USA' },
-            { long: 0.1278, lat: 51.5074, city: 'London', country: 'UK' },
-            { long: 139.6503, lat: 35.6762, city: 'Tokyo', country: 'Japan' },
-            { long: 37.6173, lat: 55.7558, city: 'Moscow', country: 'Russia' },
-            { long: 116.4074, lat: 39.9042, city: 'Beijing', country: 'China' },
-            { long: 151.2093, lat: -33.8688, city: 'Sydney', country: 'Australia' },
-            { long: -43.1729, lat: -22.9068, city: 'Rio de Janeiro', country: 'Brazil' },
-            { long: 18.4241, lat: -33.9249, city: 'Cape Town', country: 'South Africa' },
-            { long: 77.209, lat: 28.6139, city: 'New Delhi', country: 'India' },
-            { long: 103.8198, lat: 1.3521, city: 'Singapore', country: 'Singapore' },
-            { long: -122.4194, lat: 37.7749, city: 'San Francisco', country: 'USA' },
-            { long: 2.3522, lat: 48.8566, city: 'Paris', country: 'France' },
-            { long: 12.4964, lat: 41.9028, city: 'Rome', country: 'Italy' },
-            { long: -70.6483, lat: -33.4489, city: 'Santiago', country: 'Chile' },
-            { long: 55.2708, lat: 25.2048, city: 'Dubai', country: 'UAE' },
-            { long: 31.2357, lat: 30.0444, city: 'Cairo', country: 'Egypt' },
-            { long: 121.4737, lat: 31.2304, city: 'Shanghai', country: 'China' },
-            { long: -99.1332, lat: 19.4326, city: 'Mexico City', country: 'Mexico' },
-            { long: 100.5018, lat: 13.7563, city: 'Bangkok', country: 'Thailand' },
-            { long: 28.9784, lat: 41.0082, city: 'Istanbul', country: 'Turkey' },
-            { long: 67.0011, lat: 24.8607, city: 'Karachi', country: 'Pakistan' },
-            { long: -58.3816, lat: -34.6037, city: 'Buenos Aires', country: 'Argentina' },
-            { long: 120.9842, lat: 14.5995, city: 'Manila', country: 'Philippines' },
-            { long: 3.3792, lat: 6.5244, city: 'Lagos', country: 'Nigeria' },
-            { long: 106.8456, lat: -6.2088, city: 'Jakarta', country: 'Indonesia' },
-            { long: -74.0817, lat: 4.6097, city: 'Bogota', country: 'Colombia' },
-            { long: -77.0428, lat: -12.0464, city: 'Lima', country: 'Peru' },
-            { long: 36.8219, lat: -1.2921, city: 'Nairobi', country: 'Kenya' },
-            { long: 38.7469, lat: 9.0250, city: 'Addis Ababa', country: 'Ethiopia' },
-            { long: -7.5898, lat: 33.5731, city: 'Casablanca', country: 'Morocco' },
-            { long: 46.6753, lat: 24.7136, city: 'Riyadh', country: 'Saudi Arabia' },
-            { long: 51.3890, lat: 35.6892, city: 'Tehran', country: 'Iran' },
-            { long: 72.8777, lat: 19.0760, city: 'Mumbai', country: 'India' },
-            { long: 90.4125, lat: 23.8103, city: 'Dhaka', country: 'Bangladesh' },
-            { long: 106.6297, lat: 10.8231, city: 'Ho Chi Minh', country: 'Vietnam' },
-            { long: 135.5023, lat: 34.6937, city: 'Osaka', country: 'Japan' },
-            { long: 144.9631, lat: -37.8136, city: 'Melbourne', country: 'Australia' },
-            { long: 174.7633, lat: -36.8485, city: 'Auckland', country: 'New Zealand' },
-            { long: -123.1207, lat: 49.2827, city: 'Vancouver', country: 'Canada' },
-            { long: -79.3832, lat: 43.6532, city: 'Toronto', country: 'Canada' },
-            { long: -87.6298, lat: 41.8781, city: 'Chicago', country: 'USA' },
-            { long: -80.1918, lat: 25.7617, city: 'Miami', country: 'USA' },
-            { long: -3.7038, lat: 40.4168, city: 'Madrid', country: 'Spain' },
-            { long: 13.4050, lat: 52.5200, city: 'Berlin', country: 'Germany' },
-            { long: 21.0122, lat: 52.2297, city: 'Warsaw', country: 'Poland' },
-            { long: 18.0686, lat: 59.3293, city: 'Stockholm', country: 'Sweden' },
-            { long: 30.5234, lat: 50.4501, city: 'Kyiv', country: 'Ukraine' },
-          ];
+    // Groups for dynamic elements
+    const attackLinesGroup = svgGroup.append('g').attr('class', 'attack-lines');
+    const nodesGroup = svgGroup.append('g').attr('class', 'nodes');
 
-          generatedNodes = locations.map((loc, i) => {
-            const type = Math.random() > 0.7 ? 'attack' : 'node';
-            return {
-              id: `node-${i}`,
-              ...loc,
-              type,
-              ip: `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`,
-              threatLevel: ['low', 'medium', 'high', 'critical'][Math.floor(Math.random() * 4)] as any,
-              status: Math.random() > 0.8 ? 'compromised' : Math.random() > 0.5 ? 'active' : 'secure',
-              lastSeen: 'Just now',
-              attackType: type === 'attack' ? ['DDoS', 'SQL Injection', 'Brute Force', 'Malware C2'][Math.floor(Math.random() * 4)] : undefined,
-              targetedPorts: type === 'attack' ? [80, 443, 22, 3389].sort(() => Math.random() - 0.5).slice(0, 2) : undefined,
-              reputation: Math.floor(Math.random() * 100)
-            };
-          });
-        }
+    // Rotation state
+    let rotation = 0;
+    const velocity = 0.5; // degrees per frame
 
-        // 2. Calculate Attacks
-        let attacks: any[] = [];
-        if (initialLines && initialLines.length > 0) {
-          attacks = initialLines.map(line => {
-            const from = generatedNodes.find(n => n.id === line.fromId);
-            const to = generatedNodes.find(n => n.id === line.toId);
-            return from && to ? { from, to } : null;
-          }).filter(Boolean);
-        } else if (generatedNodes.length > 0) {
-          attacks = Array.from({ length: 50 }, () => ({
-            from: generatedNodes[Math.floor(Math.random() * generatedNodes.length)],
-            to: generatedNodes[Math.floor(Math.random() * generatedNodes.length)]
-          })).filter(a => a.from && a.to && a.from.id !== a.to.id);
-        }
+    const timer = d3.timer((elapsed) => {
+      rotation = (elapsed * 0.01 * velocity) % 360;
+      projection.rotate([rotation, -15]);
 
-        setNodes(generatedNodes);
-        setActiveAttacks(attacks);
+      // Update globe background radius in case of zoom/scale changes
+      svgGroup.select('circle').attr('r', projection.scale());
 
-        // 3. Draw Countries
-        svg.append('g')
-          .selectAll('path')
-          .data(countries.features)
-          .enter()
-          .append('path')
-          .attr('d', path as any)
-          .attr('fill', (d: any) => {
-            const countryName = d.properties.name;
-            const isSource = attacks.some(a => a.from.country === countryName);
-            const isTarget = attacks.some(a => a.to.country === countryName);
-            if (isSource) return '#ef444422';
-            if (isTarget) return '#3b82f622';
-            return '#0a0a0a';
-          })
-          .attr('stroke', (d: any) => {
-            const countryName = d.properties.name;
-            const isSource = attacks.some(a => a.from.country === countryName);
-            const isTarget = attacks.some(a => a.to.country === countryName);
-            if (isSource) return '#ef444444';
-            if (isTarget) return '#3b82f644';
-            return '#222';
-          })
-          .attr('stroke-width', 0.5)
-          .attr('class', 'country-path')
-          .style('transition', 'fill 0.5s, stroke 0.5s');
+      // Update grid
+      gridPath.attr('d', path as any);
 
-        // 4. Draw Ripples (Initial only, dynamic ones handled separately)
-        const rippleGroup = svg.append('g').attr('class', 'ripples');
-        attacks.forEach(attack => {
-          const start = projection([attack.from.long, attack.from.lat]);
-          const end = projection([attack.to.long, attack.to.lat]);
-          if (!start || !end) return;
-          
-          const [x, y] = end;
-          rippleGroup.append('circle')
-            .attr('cx', x)
-            .attr('cy', y)
-            .attr('r', 0)
-            .attr('fill', 'none')
-            .attr('stroke', '#ef4444')
-            .attr('stroke-width', 1)
-            .attr('opacity', 0.8)
-            .append('animate')
-            .attr('attributeName', 'r')
-            .attr('from', '0')
-            .attr('to', '20')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
-            
-          rippleGroup.append('circle')
-            .attr('cx', x)
-            .attr('cy', y)
-            .attr('r', 0)
-            .attr('fill', 'none')
-            .attr('stroke', '#ef4444')
-            .attr('stroke-width', 1)
-            .attr('opacity', 0.8)
-            .append('animate')
-            .attr('attributeName', 'opacity')
-            .attr('from', '0.8')
-            .attr('to', '0')
-            .attr('dur', '2s')
-            .attr('repeatCount', 'indefinite');
+      // Update countries
+      countryPaths.attr('d', path as any);
+
+      // Update Nodes
+      const currentNodes = nodesRef.current;
+      const nodeSelection = nodesGroup.selectAll<SVGCircleElement, MapItem>('circle')
+        .data(currentNodes, d => d.id);
+
+      nodeSelection.enter()
+        .append('circle')
+        .attr('r', d => d.type === 'attack' ? 3 : 2)
+        .attr('fill', d => d.type === 'attack' ? '#ef4444' : '#00ff41')
+        .style('cursor', 'pointer')
+        .style('filter', d => d.type === 'attack' ? 'drop-shadow(0 0 4px #ef4444)' : 'drop-shadow(0 0 4px #00ff41)')
+        .on('click', (event, d) => {
+          event.stopPropagation();
+          setSelectedItem(d);
+        })
+        .merge(nodeSelection)
+        .attr('cx', d => {
+          const p = projection([d.long, d.lat]);
+          return p ? p[0] : 0;
+        })
+        .attr('cy', d => {
+          const p = projection([d.long, d.lat]);
+          return p ? p[1] : 0;
+        })
+        .attr('display', d => {
+          // Hide nodes on the back of the globe
+          const pointPath = path({ type: 'Point', coordinates: [d.long, d.lat] } as any);
+          return pointPath ? 'block' : 'none';
         });
 
-        // 5. Draw Nodes
-        const nodeGroup = svg.append('g').attr('class', 'nodes');
-        const labelGroup = svg.append('g').attr('class', 'labels').attr('pointer-events', 'none');
+      nodeSelection.exit().remove();
 
-        nodeGroup.selectAll('circle')
-          .data(generatedNodes)
-          .enter()
-          .append('circle')
-          .attr('cx', d => projection([d.long, d.lat])![0])
-          .attr('cy', d => projection([d.long, d.lat])![1])
-          .attr('r', d => d.type === 'attack' ? 4 : 3)
-          .attr('fill', d => d.type === 'attack' ? '#ef4444' : '#00ff41')
-          .attr('class', 'map-node')
-          .style('cursor', 'pointer')
-          .style('filter', d => d.type === 'attack' ? 'drop-shadow(0 0 4px #ef4444)' : 'drop-shadow(0 0 4px #00ff41)')
-          .on('click', (event, d) => {
-            event.stopPropagation();
-            setSelectedItem(d);
-          })
-          .on('mouseover', function() {
-            d3.select(this).transition().duration(200).attr('r', 6);
-          })
-          .on('mouseout', function(event, d) {
-            d3.select(this).transition().duration(200).attr('r', d.type === 'attack' ? 4 : 3);
-          })
-          .each(function(d) {
-            if (d.type === 'attack') {
-              d3.select(this)
-                .append('animate')
-                .attr('attributeName', 'r')
-                .attr('values', '4;7;4')
-                .attr('dur', '1.5s')
-                .attr('repeatCount', 'indefinite');
-              
-              d3.select(this)
-                .append('animate')
-                .attr('attributeName', 'opacity')
-                .attr('values', '0.8;0.3;0.8')
-                .attr('dur', '1.5s')
-                .attr('repeatCount', 'indefinite');
-            }
+      // Update Attacks (Arcs)
+      const currentAttacks = attacksRef.current;
+      const attackSelection = attackLinesGroup.selectAll<SVGPathElement, any>('path')
+        .data(currentAttacks, d => d.id);
 
-            // Add labels for high threat nodes
-            if (d.threatLevel === 'critical' || d.threatLevel === 'high') {
-              const [x, y] = projection([d.long, d.lat])!;
-              labelGroup.append('text')
-                .attr('x', x + 8)
-                .attr('y', y + 3)
-                .attr('fill', d.type === 'attack' ? '#ef4444' : '#00ff41')
-                .attr('font-family', 'monospace')
-                .attr('font-size', '6px')
-                .attr('font-weight', 'bold')
-                .attr('opacity', 0.6)
-                .text(d.city.toUpperCase());
-            }
-          });
-
-        const attackGroup = svg.append('g').attr('class', 'attacks');
-
-        attacks.forEach((d, i) => {
-          const start = projection([d.from.long, d.from.lat]);
-          const end = projection([d.to.long, d.to.lat]);
-          if (!start || !end) return;
-          
-          const dx = end[0] - start[0];
-          const dy = end[1] - start[1];
-          const dr = Math.sqrt(dx * dx + dy * dy);
-          const pathId = `attack-path-${i}`;
-          const pathD = `M${start[0]},${start[1]}A${dr},${dr} 0 0,1 ${end[0]},${end[1]}`;
-
-          // The path itself
-          attackGroup.append('path')
-            .attr('id', pathId)
-            .attr('d', pathD)
-            .attr('fill', 'none')
-            .attr('stroke', '#ef4444')
-            .attr('stroke-width', 0.8)
-            .attr('stroke-dasharray', '4,4')
-            .attr('opacity', 0.3)
-            .style('cursor', 'pointer')
-            .on('click', (event) => {
-              event.stopPropagation();
-              setSelectedItem({
-                id: `attack-${Math.random()}`,
-                long: (d.from.long + d.to.long) / 2,
-                lat: (d.from.lat + d.to.lat) / 2,
-                type: 'attack',
-                country: d.to.country,
-                city: d.to.city,
-                ip: d.from.ip,
-                threatLevel: 'critical',
-                status: 'compromised',
-                lastSeen: 'Active',
-                attackType: ['DDoS Flood', 'Exfiltration', 'Zero-day Exploit'][Math.floor(Math.random() * 3)],
-                targetedPorts: [443, 8080],
-                reputation: 0
-              });
-            })
-            .on('mouseover', function() {
-              d3.select(this).transition().duration(200).attr('stroke-width', 2).attr('opacity', 0.8);
-            })
-            .on('mouseout', function() {
-              d3.select(this).transition().duration(200).attr('stroke-width', 0.8).attr('opacity', 0.3);
-            });
-
-          // The animated particle
-          const particle = attackGroup.append('circle')
-            .attr('r', 1.5)
-            .attr('fill', '#ef4444')
-            .style('filter', 'drop-shadow(0 0 3px #ef4444)');
-
-          particle.append('animateMotion')
-            .attr('dur', `${Math.random() * 2 + 1.5}s`)
-            .attr('repeatCount', 'indefinite')
-            .append('mpath')
-            .attr('xlink:href', `#${pathId}`);
-            
-          // Add a second, trailing particle for more "flow"
-          const particle2 = attackGroup.append('circle')
-            .attr('r', 1)
-            .attr('fill', '#ef4444')
-            .attr('opacity', 0.6);
-
-          particle2.append('animateMotion')
-            .attr('dur', `${Math.random() * 2 + 1.5}s`)
-            .attr('begin', '0.5s')
-            .attr('repeatCount', 'indefinite')
-            .append('mpath')
-            .attr('xlink:href', `#${pathId}`);
-
-          // Add a "Data Burst" particle occasionally
-          if (Math.random() > 0.5) {
-            const burst = attackGroup.append('circle')
-              .attr('r', 2.5)
-              .attr('fill', '#fff')
-              .attr('opacity', 0.8)
-              .style('filter', 'drop-shadow(0 0 5px #ef4444)');
-
-            burst.append('animateMotion')
-              .attr('dur', `${Math.random() * 1 + 1}s`)
-              .attr('repeatCount', 'indefinite')
-              .attr('begin', `${Math.random() * 3}s`)
-              .append('mpath')
-              .attr('xlink:href', `#${pathId}`);
-          }
-        });
-  }, [initialNodes, initialLines, mapData]);
-
-  // Dynamic attack lines rendering
-  useEffect(() => {
-    if (!svgRef.current || !mapData || !nodes.length) return;
-
-    const svg = d3.select(svgRef.current);
-    const projection = d3.geoMercator()
-      .scale(120)
-      .translate([800 / 2, 300 / 1.5]);
-
-    // Clear previous dynamic elements
-    svg.selectAll('.dynamic-attacks').remove();
-    svg.selectAll('.dynamic-ripples').remove();
-
-    const dynamicGroup = svg.append('g').attr('class', 'dynamic-attacks');
-    const rippleGroup = svg.append('g').attr('class', 'dynamic-ripples');
-
-    activeAttacks.forEach((attack, i) => {
-      if (!attack.from || !attack.to) return;
-      
-      const start = projection([attack.from.long, attack.from.lat]);
-      const end = projection([attack.to.long, attack.to.lat]);
-      
-      if (!start || !end) return;
-
-      // Draw Ripples
-      rippleGroup.append('circle')
-        .attr('cx', end[0])
-        .attr('cy', end[1])
-        .attr('r', 0)
+      attackSelection.enter()
+        .append('path')
         .attr('fill', 'none')
         .attr('stroke', '#ef4444')
-        .attr('stroke-width', 1)
+        .attr('stroke-width', 1.5)
         .attr('opacity', 0.8)
-        .append('animate')
-        .attr('attributeName', 'r')
-        .attr('from', '0')
-        .attr('to', '20')
-        .attr('dur', '2s')
-        .attr('repeatCount', 'indefinite');
-        
-      rippleGroup.append('circle')
-        .attr('cx', end[0])
-        .attr('cy', end[1])
-        .attr('r', 0)
-        .attr('fill', 'none')
-        .attr('stroke', '#ef4444')
-        .attr('stroke-width', 1)
-        .attr('opacity', 0.8)
-        .append('animate')
-        .attr('attributeName', 'opacity')
-        .attr('from', '0.8')
-        .attr('to', '0')
-        .attr('dur', '2s')
-        .attr('repeatCount', 'indefinite');
+        .style('filter', 'drop-shadow(0 0 4px #ef4444)')
+        .attr('stroke-dasharray', '4, 8')
+        .merge(attackSelection)
+        .attr('d', d => {
+          const route = {
+            type: "LineString",
+            coordinates: [
+              [d.from.long, d.from.lat],
+              [d.to.long, d.to.lat]
+            ]
+          };
+          return path(route as any);
+        })
+        .attr('display', d => {
+          const route = {
+            type: "LineString",
+            coordinates: [
+              [d.from.long, d.from.lat],
+              [d.to.long, d.to.lat]
+            ]
+          };
+          return path(route as any) ? 'block' : 'none';
+        })
+        .attr('stroke-dashoffset', -(elapsed * 0.05) % 12); // Flowing animation
 
-      // Draw Attack Lines
-      const dx = end[0] - start[0];
-      const dy = end[1] - start[1];
-      const dr = Math.sqrt(dx * dx + dy * dy) * 1.2; // Smoother arc
-      const pathId = `dynamic-attack-path-${i}-${attack.id || Math.random()}`;
-      const pathD = `M${start[0]},${start[1]}A${dr},${dr} 0 0,1 ${end[0]},${end[1]}`;
+      attackSelection.exit().remove();
 
-      dynamicGroup.append('path')
-        .attr('id', pathId)
-        .attr('d', pathD)
-        .attr('fill', 'none')
-        .attr('stroke', '#ef4444')
-        .attr('stroke-width', 1)
-        .attr('stroke-dasharray', '4,4')
-        .attr('opacity', 0.4);
-
-      // The animated particle (Data packet)
-      const particle = dynamicGroup.append('circle')
-        .attr('r', 2)
-        .attr('fill', '#fff')
-        .style('filter', 'drop-shadow(0 0 4px #ef4444)');
-
-      particle.append('animateMotion')
-        .attr('dur', `2s`)
-        .attr('repeatCount', 'indefinite')
-        .append('mpath')
-        .attr('xlink:href', `#${pathId}`);
-        
-      // Add a second, trailing particle (Tail)
-      const particle2 = dynamicGroup.append('circle')
-        .attr('r', 1.5)
-        .attr('fill', '#ef4444')
-        .attr('opacity', 0.8);
-
-      particle2.append('animateMotion')
-        .attr('dur', `2s`)
-        .attr('begin', '0.2s')
-        .attr('repeatCount', 'indefinite')
-        .append('mpath')
-        .attr('xlink:href', `#${pathId}`);
     });
 
-  }, [activeAttacks, mapData, nodes]);
+    return () => {
+      timer.stop();
+    };
+  }, [mapData, nodes]);
 
   // Dynamic country highlighting based on active attacks
   useEffect(() => {
-    if (!svgRef.current || !activeAttacks.length) return;
+    if (!svgRef.current || !activeAttacks.length || !mapData) return;
     
     const svg = d3.select(svgRef.current);
     
@@ -592,22 +320,32 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
       .transition()
       .duration(500)
       .attr('fill', (d: any) => {
-        const countryName = d.properties.name;
+        const countryName = d?.properties?.name;
+        if (!countryName) return '#0a0a0a';
         const isSource = activeAttacks.some(a => a.from.country === countryName);
         const isTarget = activeAttacks.some(a => a.to.country === countryName);
-        if (isSource) return '#ef444433';
-        if (isTarget) return '#3b82f633';
+        if (isSource) return '#ef444444'; // Red for attackers
+        if (isTarget) return '#00ff4144'; // Green for targets
         return '#0a0a0a';
       })
       .attr('stroke', (d: any) => {
-        const countryName = d.properties.name;
+        const countryName = d?.properties?.name;
+        if (!countryName) return '#00ff41';
         const isSource = activeAttacks.some(a => a.from.country === countryName);
         const isTarget = activeAttacks.some(a => a.to.country === countryName);
-        if (isSource) return '#ef444466';
-        if (isTarget) return '#3b82f666';
-        return '#222';
+        if (isSource) return '#ef4444';
+        if (isTarget) return '#00ff41';
+        return '#00ff41';
+      })
+      .attr('stroke-opacity', (d: any) => {
+        const countryName = d?.properties?.name;
+        if (!countryName) return 0.5;
+        const isSource = activeAttacks.some(a => a.from.country === countryName);
+        const isTarget = activeAttacks.some(a => a.to.country === countryName);
+        if (isSource || isTarget) return 1;
+        return 0.5;
       });
-  }, [activeAttacks]);
+  }, [activeAttacks, mapData]);
 
   const toggleFullScreen = () => {
     if (!containerRef.current) return;
@@ -624,7 +362,7 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
 
   return (
     <div ref={containerRef} className={cn(
-      "w-full h-full relative group overflow-hidden bg-black",
+      "w-full h-full relative group overflow-hidden bg-[#050505]",
       isFullScreen ? "fixed inset-0 z-[100]" : ""
     )}>
       {/* Map Controls */}
@@ -694,11 +432,11 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
               {activeAttacks.length > 0 ? (
                 activeAttacks.slice(0, 6).map((attack, i) => (
                   <motion.div 
-                    key={`${attack.from.id}-${attack.to.id}-${i}`}
+                    key={`${attack.from.id}-${attack.to.id}-${attack.id}`}
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 20 }}
-                    transition={{ duration: 0.3, delay: i * 0.1 }}
+                    transition={{ duration: 0.3 }}
                     className="text-[9px] font-mono border-l-2 border-[#ef4444]/50 pl-3 py-1.5 bg-white/5 rounded-r"
                   >
                     <div className="flex justify-between items-center mb-0.5">
@@ -793,100 +531,88 @@ export default function ThreatMap({ onAction, initialNodes, initialLines }: Thre
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="absolute bottom-6 left-6 right-6 md:left-auto md:w-80 bg-cyber-card/95 backdrop-blur-xl border border-cyber-border rounded-2xl shadow-2xl overflow-hidden z-30"
+            className="absolute bottom-6 left-6 right-6 md:left-auto md:w-80 bg-black/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-30"
           >
-            <div className="p-4 border-b border-cyber-border flex items-center justify-between bg-white/5">
+            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5">
               <div className="flex items-center gap-2">
                 {selectedItem.type === 'attack' ? (
-                  <ShieldAlert className="text-red-500" size={16} />
+                  <ShieldAlert className="text-red-500" size={18} />
                 ) : (
-                  <Activity className="text-cyber-green" size={16} />
+                  <ShieldCheck className="text-cyber-green" size={18} />
                 )}
-                <span className="text-xs font-mono font-bold uppercase tracking-widest text-white">
-                  {selectedItem.type === 'attack' ? 'Threat Detected' : 'Node Intelligence'}
-                </span>
+                <h3 className="font-mono font-bold text-white uppercase tracking-wider text-sm">
+                  {selectedItem.type === 'attack' ? 'Threat Detected' : 'Node Status'}
+                </h3>
               </div>
               <button 
                 onClick={() => setSelectedItem(null)}
-                className="p-1 hover:bg-white/10 rounded-lg transition-colors text-gray-500 hover:text-white"
+                className="text-gray-500 hover:text-white transition-colors"
               >
                 <X size={16} />
               </button>
             </div>
-
-            <div className="p-5 space-y-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="text-lg font-bold text-white leading-tight">{selectedItem.city}</h4>
-                    <p className="text-[10px] font-mono text-gray-500 uppercase">{selectedItem.country}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className={cn(
-                      "text-[10px] px-2 py-0.5 rounded-full font-mono uppercase border",
-                      selectedItem.threatLevel === 'critical' ? "bg-red-500/20 text-red-500 border-red-500/30" :
-                      selectedItem.threatLevel === 'high' ? "bg-orange-500/20 text-orange-500 border-orange-500/30" :
-                      "bg-cyber-green/20 text-cyber-green border-cyber-green/30"
-                    )}>
-                      {selectedItem.threatLevel} risk
-                    </span>
-                    {selectedItem.reputation !== undefined && (
-                      <span className="text-[8px] font-mono text-gray-600 uppercase">Reputation: {selectedItem.reputation}/100</span>
-                    )}
-                  </div>
+            
+            <div className="p-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <div className="text-[10px] font-mono text-gray-500 uppercase mb-1">Location</div>
+                  <div className="text-xs font-mono text-white">{selectedItem.city}, {selectedItem.country}</div>
                 </div>
-
-                {selectedItem.type === 'attack' && (
-                  <div className="p-2 bg-red-500/5 border border-red-500/10 rounded-lg">
-                    <div className="text-[9px] font-mono text-red-400 uppercase mb-1">Attack Intelligence</div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-white">{selectedItem.attackType}</span>
-                      <span className="text-[10px] font-mono text-gray-500">Ports: {selectedItem.targetedPorts?.join(', ')}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-2 gap-4 py-3 border-y border-cyber-border/50">
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-mono text-gray-600 uppercase">IP Address</span>
-                    <div className="text-xs font-mono text-gray-300">{selectedItem.ip}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <span className="text-[9px] font-mono text-gray-600 uppercase">Status</span>
-                    <div className={cn(
-                      "text-xs font-mono uppercase",
-                      selectedItem.status === 'compromised' ? "text-red-500" : "text-cyber-green"
-                    )}>
-                      {selectedItem.status}
-                    </div>
-                  </div>
+                <div>
+                  <div className="text-[10px] font-mono text-gray-500 uppercase mb-1">IP Address</div>
+                  <div className="text-xs font-mono text-white">{selectedItem.ip}</div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
+              {selectedItem.type === 'attack' && (
+                <>
+                  <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-lg">
+                    <div className="text-[10px] font-mono text-red-500 uppercase mb-1">Attack Vector</div>
+                    <div className="text-sm font-mono text-red-400 font-bold">{selectedItem.attackType}</div>
+                  </div>
+                  
+                  {selectedItem.targetedPorts && (
+                    <div>
+                      <div className="text-[10px] font-mono text-gray-500 uppercase mb-2">Targeted Ports</div>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedItem.targetedPorts.map(port => (
+                          <span key={port} className="px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] font-mono text-gray-300">
+                            PORT {port}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {selectedItem.type === 'node' && (
+                <div>
+                  <div className="text-[10px] font-mono text-gray-500 uppercase mb-2">System Integrity</div>
+                  <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full rounded-full",
+                        selectedItem.status === 'secure' ? "bg-cyber-green" :
+                        selectedItem.status === 'active' ? "bg-blue-500" : "bg-red-500"
+                      )}
+                      style={{ width: `${selectedItem.reputation}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-white/10 flex justify-end">
                 <button 
-                  onClick={() => onAction?.('scanner', selectedItem.ip)}
-                  className="flex items-center justify-center gap-2 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-lg text-[10px] font-mono font-bold text-red-500 transition-all uppercase"
+                  onClick={() => {
+                    if (onAction) {
+                      onAction('scanner', selectedItem.ip);
+                    }
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/30 rounded-lg text-xs font-mono text-cyber-green transition-all"
                 >
-                  <Search size={12} /> Scan Target
-                </button>
-                <button 
-                  onClick={() => onAction?.('network', selectedItem.ip)}
-                  className="flex items-center justify-center gap-2 py-2 bg-cyber-green/10 hover:bg-cyber-green/20 border border-cyber-green/20 rounded-lg text-[10px] font-mono font-bold text-cyber-green transition-all uppercase"
-                >
-                  <Globe size={12} /> OSINT Trace
-                </button>
-                <button 
-                  onClick={() => onAction?.('topology', selectedItem.ip)}
-                  className="flex items-center justify-center gap-2 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded-lg text-[10px] font-mono font-bold text-blue-500 transition-all uppercase"
-                >
-                  <Activity size={12} /> Map Topology
-                </button>
-                <button 
-                  onClick={() => onAction?.('payloads', selectedItem.ip)}
-                  className="flex items-center justify-center gap-2 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[10px] font-mono font-bold text-gray-400 hover:text-white transition-all uppercase"
-                >
-                  <TerminalIcon size={12} /> Deploy Payload
+                  <Search size={14} />
+                  INITIATE SCAN
                 </button>
               </div>
             </div>
