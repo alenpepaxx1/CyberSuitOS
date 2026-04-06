@@ -5,36 +5,13 @@ import {
   Eye, Terminal, Sparkles, AlertTriangle, CheckCircle2,
   Lock, Smartphone, Phone, QrCode, Target, BarChart3,
   Search, MousePointer2, Info, X, ChevronRight, Brain, Link2, FileWarning,
-  User, ShieldCheck, Zap
+  User, ShieldCheck, Zap, Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { fetchAiGenerate } from '../lib/ai-fetch';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
-
-interface RedFlag {
-  id: string;
-  description: string;
-  location: string;
-}
-
-interface PhishingCampaign {
-  id: string;
-  target: string;
-  subject: string;
-  content: string;
-  type: 'credential-harvesting' | 'malware-delivery' | 'bec' | 'smishing' | 'vishing' | 'qr-phishing' | 'spear-phishing' | 'whaling';
-  difficulty: 'low' | 'medium' | 'high' | 'expert';
-  psychologicalTriggers: string[];
-  redFlags: RedFlag[];
-  metrics: {
-    clickRate: number;
-    reportRate: number;
-    compromiseRate: number;
-    deptBreakdown: { dept: string; rate: number }[];
-  };
-  phishScore: number;
-}
+import { MASSIVE_PHISHING_DB, PhishingCampaign } from '../lib/phishing-db';
 
 export default function PhishingSimulator() {
   const [target, setTarget] = useState('');
@@ -44,7 +21,8 @@ export default function PhishingSimulator() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [foundFlags, setFoundFlags] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'preview' | 'analytics' | 'analysis'>('preview');
+  const [activeTab, setActiveTab] = useState<'preview' | 'analytics' | 'analysis' | 'templates'>('preview');
+  const [searchQuery, setSearchQuery] = useState('');
 
   const generateCampaign = async () => {
     if (!target) return;
@@ -123,6 +101,17 @@ export default function PhishingSimulator() {
       
       // Vector-specific Fallback Engine
       const getFallbackData = () => {
+        const dbMatches = MASSIVE_PHISHING_DB.filter(c => c.type === type);
+        if (dbMatches.length > 0) {
+          const randomMatch = dbMatches[Math.floor(Math.random() * dbMatches.length)];
+          return {
+            subject: randomMatch.subject,
+            content: randomMatch.content,
+            redFlags: randomMatch.redFlags,
+            phishScore: randomMatch.phishScore
+          };
+        }
+        
         switch(type) {
           case 'smishing':
             return {
@@ -370,6 +359,14 @@ export default function PhishingSimulator() {
             {isLoading ? 'Synthesizing...' : 'Launch Simulation'}
           </button>
 
+          <button
+            onClick={() => { setCampaign(null); setActiveTab('templates'); }}
+            className="w-full py-3 bg-white/5 hover:bg-white/10 text-white rounded-xl font-mono text-[11px] font-bold uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-3"
+          >
+            <Database className="w-4 h-4" />
+            Template Library ({MASSIVE_PHISHING_DB.length})
+          </button>
+
           <div className="p-5 bg-blue-500/5 border border-blue-500/10 rounded-2xl space-y-3">
             <div className="flex items-center gap-2 text-blue-400">
               <ShieldAlert className="w-4 h-4" />
@@ -384,7 +381,66 @@ export default function PhishingSimulator() {
         {/* Main Content Area */}
         <div className="flex-1 bg-[#030303] flex flex-col overflow-hidden">
           <AnimatePresence mode="wait">
-            {campaign ? (
+            {activeTab === 'templates' ? (
+              <motion.div
+                key="templates"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex-1 flex flex-col overflow-hidden p-8"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-mono font-bold text-white uppercase tracking-widest flex items-center gap-3">
+                    <Database className="text-blue-500" />
+                    Phishing Template Library
+                  </h3>
+                  <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search templates..."
+                      className="bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50 w-64"
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-4">
+                  {MASSIVE_PHISHING_DB
+                    .filter(c => c.subject.toLowerCase().includes(searchQuery.toLowerCase()) || c.type.toLowerCase().includes(searchQuery.toLowerCase()))
+                    .slice(0, 50) // Show top 50 for performance
+                    .map((template) => (
+                    <div key={template.id} className="bg-white/5 border border-white/10 rounded-xl p-5 hover:border-blue-500/30 transition-all flex items-center justify-between group">
+                      <div>
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-[10px] font-mono uppercase",
+                            template.difficulty === 'expert' ? "bg-red-500/20 text-red-400" :
+                            template.difficulty === 'high' ? "bg-orange-500/20 text-orange-400" :
+                            template.difficulty === 'medium' ? "bg-blue-500/20 text-blue-400" :
+                            "bg-emerald-500/20 text-emerald-400"
+                          )}>
+                            {template.difficulty}
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-500 uppercase">{template.type}</span>
+                        </div>
+                        <h4 className="text-white font-medium">{template.subject}</h4>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setCampaign(template);
+                          setActiveTab('preview');
+                        }}
+                        className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg text-xs font-mono uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        Use Template
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            ) : campaign ? (
               <motion.div
                 key={campaign.id}
                 initial={{ opacity: 0 }}
