@@ -272,24 +272,24 @@ export default function Terminal() {
       initial={{ y: 300 }}
       animate={{ y: isMinimized ? 260 : 0 }}
       className={cn(
-        "fixed bottom-8 right-8 w-[450px] bg-black/95 border border-cyber-border rounded-xl overflow-hidden z-50 shadow-2xl backdrop-blur-xl",
-        "before:absolute before:inset-0 before:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] before:bg-[length:100%_2px,3px_100%] before:pointer-events-none before:z-10",
+        "fixed bottom-8 right-8 w-[450px] bg-black/90 border border-[#00FF41]/30 rounded-xl overflow-hidden z-50 shadow-[0_0_30px_rgba(0,255,65,0.15)] backdrop-blur-xl",
+        "before:absolute before:inset-0 before:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(0,255,65,0.06),rgba(0,255,65,0.02),rgba(0,255,65,0.06))] before:bg-[length:100%_2px,3px_100%] before:pointer-events-none before:z-10",
         isMinimized ? "h-10" : "h-96"
       )}
     >
       {/* Scanline Effect */}
-      <div className="absolute inset-0 pointer-events-none z-20 bg-[radial-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_100%),linear-gradient(transparent_0%,rgba(32,128,32,0.02)_2%,transparent_3%)] bg-[length:100%_100%,100%_100px] animate-scanline" />
+      <div className="absolute inset-0 pointer-events-none z-20 bg-[radial-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_100%),linear-gradient(transparent_0%,rgba(0,255,65,0.05)_2%,transparent_3%)] bg-[length:100%_100%,100%_100px] animate-scanline" />
       {/* Header */}
-      <div className="h-10 bg-cyber-card border-b border-cyber-border flex items-center justify-between px-4 cursor-pointer" onClick={() => setIsMinimized(!isMinimized)}>
+      <div className="h-10 bg-black/80 border-b border-[#00FF41]/30 flex items-center justify-between px-4 cursor-pointer shadow-[inset_0_0_15px_rgba(0,255,65,0.05)]" onClick={() => setIsMinimized(!isMinimized)}>
         <div className="flex items-center gap-2">
-          <TerminalIcon size={14} className="text-cyber-green" />
-          <span className="text-[10px] font-mono text-gray-400 uppercase tracking-widest">System Console</span>
+          <TerminalIcon size={14} className="text-[#00FF41] drop-shadow-[0_0_5px_currentColor]" />
+          <span className="text-[10px] font-mono text-[#00FF41] uppercase tracking-widest drop-shadow-[0_0_2px_currentColor]">System Console</span>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-gray-500 hover:text-white">
+          <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-[#00FF41]/50 hover:text-[#00FF41] transition-colors">
             {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
           </button>
-          <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} className="text-gray-500 hover:text-red-400">
+          <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} className="text-[#00FF41]/50 hover:text-red-500 transition-colors">
             <X size={12} />
           </button>
         </div>
@@ -302,7 +302,7 @@ export default function Terminal() {
             ref={scrollRef}
             className="flex-1 p-4 overflow-y-auto font-mono text-[10px] space-y-1 custom-scrollbar relative z-0"
           >
-            <div className="mb-4 text-cyber-green/60 leading-tight">
+            <div className="mb-4 text-[#00FF41]/60 leading-tight drop-shadow-[0_0_2px_currentColor]">
               Welcome to CyberSuite OS v1.0.4 (Kernel 5.15.0-72-generic)<br/>
               * Documentation: https://cybersuite.os/docs<br/>
               * Support: root@cybersuite.os<br/>
@@ -311,23 +311,23 @@ export default function Terminal() {
             </div>
             {logs.map((log) => (
               <div key={log.id} className="flex gap-2 group">
-                <span className="text-gray-600 shrink-0">[{log.timestamp}]</span>
+                <span className="text-[#00FF41]/40 shrink-0">[{log.timestamp}]</span>
                 <span className={cn(
-                  "shrink-0 uppercase",
+                  "shrink-0 uppercase drop-shadow-[0_0_2px_currentColor]",
                   log.level === 'info' ? "text-blue-400" :
                   log.level === 'warn' ? "text-yellow-400" :
-                  log.level === 'error' ? "text-red-400" :
-                  "text-cyber-green"
+                  log.level === 'error' ? "text-red-500" :
+                  "text-[#00FF41]"
                 )}>
                   {log.level}:
                 </span>
-                <span className="text-gray-300 break-all">{log.message}</span>
+                <span className="text-[#00FF41]/80 break-all">{log.message}</span>
               </div>
             ))}
           </div>
           
-          <div className="p-2 bg-black/40 border-t border-cyber-border flex items-center gap-2 relative z-30">
-            <span className="text-cyber-green font-bold text-[10px] shrink-0">alen@cybersuite:~$</span>
+          <div className="p-2 bg-black/60 border-t border-[#00FF41]/30 flex items-center gap-2 relative z-30 shadow-[inset_0_5px_15px_rgba(0,255,65,0.05)]">
+            <span className="text-[#00FF41] font-bold text-[10px] shrink-0 drop-shadow-[0_0_2px_currentColor]">alen@cybersuite:~$</span>
             <input
               ref={inputRef}
               type="text"
@@ -335,10 +335,10 @@ export default function Terminal() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type a command..."
-              className="flex-1 bg-transparent border-none outline-none font-mono text-[10px] text-cyber-green placeholder:text-gray-700"
+              className="flex-1 bg-transparent border-none outline-none font-mono text-[10px] text-[#00FF41] placeholder:text-[#00FF41]/30"
               autoFocus
             />
-            <div className="w-1.5 h-3 bg-cyber-green animate-pulse shrink-0" />
+            <div className="w-1.5 h-3 bg-[#00FF41] animate-pulse shrink-0 drop-shadow-[0_0_5px_currentColor]" />
           </div>
         </div>
       )}
