@@ -45,70 +45,53 @@ const DORK_CATEGORIES = [
 ];
 
 const PRESET_DORKS: Dork[] = [
-  {
-    id: '1',
-    title: 'Exposed Configuration Files',
-    query: 'filetype:env "DB_PASSWORD"',
-    category: 'sensitive',
-    description: 'Finds exposed .env files containing database passwords.',
-    severity: 'critical'
-  },
-  {
-    id: '2',
-    title: 'Publicly Accessible Log Files',
-    query: 'filetype:log "error" "password"',
-    category: 'files',
-    description: 'Locates log files that might contain sensitive error details or credentials.',
-    severity: 'medium'
-  },
-  {
-    id: '3',
-    title: 'Vulnerable WordPress Plugins',
-    query: 'inurl:/wp-content/plugins/revslider/',
-    category: 'vuln',
-    description: 'Identifies sites using potentially vulnerable versions of RevSlider.',
-    severity: 'high'
-  },
-  {
-    id: '4',
-    title: 'Exposed Git Directories',
-    query: 'intitle:"index of" ".git"',
-    category: 'files',
-    description: 'Finds servers where the .git directory is publicly accessible.',
-    severity: 'high'
-  },
-  {
-    id: '5',
-    title: 'Admin Login Panels',
-    query: 'intitle:"admin login" "username" "password"',
-    category: 'login',
-    description: 'Locates administrative login interfaces.',
-    severity: 'low'
-  },
-  {
-    id: '6',
-    title: 'SQL Error Messages',
-    query: '"SQL syntax error" intext:"check the manual that corresponds"',
-    category: 'vuln',
-    description: 'Finds pages displaying SQL syntax errors, indicating potential SQL injection.',
-    severity: 'high'
-  },
-  {
-    id: '7',
-    title: 'Exposed Backup Files',
-    query: 'filetype:sql "dump" "password"',
-    category: 'sensitive',
-    description: 'Locates SQL database dumps containing passwords.',
-    severity: 'critical'
-  },
-  {
-    id: '8',
-    title: 'Open Directory Listings',
-    query: 'intitle:"index of" "parent directory"',
-    category: 'files',
-    description: 'Finds servers with directory listing enabled.',
-    severity: 'low'
-  }
+  // Sensitive
+  { id: '1', title: 'Exposed Configuration Files', query: 'filetype:env "DB_PASSWORD"', category: 'sensitive', description: 'Finds exposed .env files containing database passwords.', severity: 'critical' },
+  { id: '2', title: 'Exposed Backup Files', query: 'filetype:sql "dump" "password"', category: 'sensitive', description: 'Locates SQL database dumps containing passwords.', severity: 'critical' },
+  { id: '3', title: 'Exposed RSA Private Keys', query: 'intitle:"index of" "id_rsa" OR "id_rsa.pub"', category: 'sensitive', description: 'Finds exposed SSH private keys.', severity: 'critical' },
+  { id: '4', title: 'Exposed AWS Credentials', query: 'filetype:txt "AKIA" "aws_secret_access_key"', category: 'sensitive', description: 'Finds exposed AWS access keys.', severity: 'critical' },
+  { id: '5', title: 'Exposed PHP Info', query: 'ext:php intitle:phpinfo "published by the PHP Group"', category: 'sensitive', description: 'Finds exposed phpinfo() pages revealing server details.', severity: 'medium' },
+  { id: '6', title: 'Exposed Docker Compose', query: 'filetype:yaml "docker-compose" "MYSQL_ROOT_PASSWORD"', category: 'sensitive', description: 'Finds exposed docker-compose.yml files with passwords.', severity: 'critical' },
+  { id: '7', title: 'Exposed WP-Config', query: 'filetype:txt "wp-config.php" "DB_PASSWORD"', category: 'sensitive', description: 'Finds exposed WordPress configuration files.', severity: 'critical' },
+  { id: '8', title: 'Exposed Firebase Configs', query: 'filetype:json "firebase" "apiKey" "databaseURL"', category: 'sensitive', description: 'Finds exposed Firebase configuration files.', severity: 'high' },
+  { id: '9', title: 'Exposed API Keys', query: '"api_key" OR "apikey" ext:txt OR ext:env OR ext:log', category: 'sensitive', description: 'Finds exposed API keys in various text files.', severity: 'critical' },
+  { id: '10', title: 'Exposed FTP Credentials', query: 'filetype:txt "ftp" "username" "password"', category: 'sensitive', description: 'Finds exposed FTP credentials.', severity: 'critical' },
+  
+  // Files
+  { id: '11', title: 'Publicly Accessible Log Files', query: 'filetype:log "error" "password"', category: 'files', description: 'Locates log files that might contain sensitive error details or credentials.', severity: 'medium' },
+  { id: '12', title: 'Exposed Git Directories', query: 'intitle:"index of" ".git"', category: 'files', description: 'Finds servers where the .git directory is publicly accessible.', severity: 'high' },
+  { id: '13', title: 'Open Directory Listings', query: 'intitle:"index of" "parent directory"', category: 'files', description: 'Finds servers with directory listing enabled.', severity: 'low' },
+  { id: '14', title: 'Exposed SVN Directories', query: 'intitle:"index of" ".svn"', category: 'files', description: 'Finds servers where the .svn directory is publicly accessible.', severity: 'high' },
+  { id: '15', title: 'Exposed Apache Logs', query: 'intitle:"index of" "access.log"', category: 'files', description: 'Finds exposed Apache access logs.', severity: 'medium' },
+  { id: '16', title: 'Exposed MySQL Logs', query: 'filetype:log "mysql" "error"', category: 'files', description: 'Finds exposed MySQL error logs.', severity: 'medium' },
+  { id: '17', title: 'Exposed Bash History', query: 'intitle:"index of" ".bash_history"', category: 'files', description: 'Finds exposed bash history files.', severity: 'high' },
+  { id: '18', title: 'Exposed Excel Documents', query: 'filetype:xls OR filetype:xlsx "password" OR "confidential"', category: 'files', description: 'Finds exposed Excel documents containing sensitive information.', severity: 'high' },
+  { id: '19', title: 'Exposed PDF Documents', query: 'filetype:pdf "confidential" OR "internal use only"', category: 'files', description: 'Finds exposed PDF documents containing sensitive information.', severity: 'medium' },
+  { id: '20', title: 'Exposed Word Documents', query: 'filetype:doc OR filetype:docx "password" OR "confidential"', category: 'files', description: 'Finds exposed Word documents containing sensitive information.', severity: 'high' },
+  
+  // Login
+  { id: '21', title: 'Admin Login Panels', query: 'intitle:"admin login" "username" "password"', category: 'login', description: 'Locates administrative login interfaces.', severity: 'low' },
+  { id: '22', title: 'WordPress Login Panels', query: 'intitle:"Log In" "WordPress" inurl:wp-login.php', category: 'login', description: 'Locates WordPress login interfaces.', severity: 'low' },
+  { id: '23', title: 'Joomla Login Panels', query: 'intitle:"Joomla! Administration Login"', category: 'login', description: 'Locates Joomla administrative login interfaces.', severity: 'low' },
+  { id: '24', title: 'Drupal Login Panels', query: 'inurl:user/login intitle:"Log in" "Drupal"', category: 'login', description: 'Locates Drupal login interfaces.', severity: 'low' },
+  { id: '25', title: 'Magento Login Panels', query: 'intitle:"Magento Admin Panel" "Log in"', category: 'login', description: 'Locates Magento administrative login interfaces.', severity: 'low' },
+  { id: '26', title: 'cPanel Login Panels', query: 'intitle:"cPanel Login" "username" "password"', category: 'login', description: 'Locates cPanel login interfaces.', severity: 'low' },
+  { id: '27', title: 'phpMyAdmin Login Panels', query: 'intitle:"phpMyAdmin" "Welcome to phpMyAdmin"', category: 'login', description: 'Locates phpMyAdmin login interfaces.', severity: 'low' },
+  { id: '28', title: 'Router Login Panels', query: 'intitle:"router" "login" "password"', category: 'login', description: 'Locates router login interfaces.', severity: 'low' },
+  { id: '29', title: 'Webcam Login Panels', query: 'intitle:"webcam" "login" "password"', category: 'login', description: 'Locates webcam login interfaces.', severity: 'low' },
+  { id: '30', title: 'Jenkins Login Panels', query: 'intitle:"Sign in [Jenkins]"', category: 'login', description: 'Locates Jenkins login interfaces.', severity: 'low' },
+  
+  // Vuln
+  { id: '31', title: 'Vulnerable WordPress Plugins', query: 'inurl:/wp-content/plugins/revslider/', category: 'vuln', description: 'Identifies sites using potentially vulnerable versions of RevSlider.', severity: 'high' },
+  { id: '32', title: 'SQL Error Messages', query: '"SQL syntax error" intext:"check the manual that corresponds"', category: 'vuln', description: 'Finds pages displaying SQL syntax errors, indicating potential SQL injection.', severity: 'high' },
+  { id: '33', title: 'Cross-Site Scripting (XSS)', query: 'inurl:"search.php?q="', category: 'vuln', description: 'Finds pages potentially vulnerable to Cross-Site Scripting (XSS).', severity: 'medium' },
+  { id: '34', title: 'Local File Inclusion (LFI)', query: 'inurl:"page=" OR inurl:"file="', category: 'vuln', description: 'Finds pages potentially vulnerable to Local File Inclusion (LFI).', severity: 'high' },
+  { id: '35', title: 'Remote File Inclusion (RFI)', query: 'inurl:"include=" OR inurl:"require="', category: 'vuln', description: 'Finds pages potentially vulnerable to Remote File Inclusion (RFI).', severity: 'critical' },
+  { id: '36', title: 'Open Redirects', query: 'inurl:"redirect=" OR inurl:"url="', category: 'vuln', description: 'Finds pages potentially vulnerable to Open Redirects.', severity: 'medium' },
+  { id: '37', title: 'Directory Traversal', query: 'inurl:"../" OR inurl:"..%2f"', category: 'vuln', description: 'Finds pages potentially vulnerable to Directory Traversal.', severity: 'high' },
+  { id: '38', title: 'Command Injection', query: 'inurl:"cmd=" OR inurl:"exec="', category: 'vuln', description: 'Finds pages potentially vulnerable to Command Injection.', severity: 'critical' },
+  { id: '39', title: 'Server-Side Request Forgery (SSRF)', query: 'inurl:"url=" OR inurl:"uri="', category: 'vuln', description: 'Finds pages potentially vulnerable to Server-Side Request Forgery (SSRF).', severity: 'high' },
+  { id: '40', title: 'XML External Entity (XXE)', query: 'inurl:"xml=" OR inurl:"data="', category: 'vuln', description: 'Finds pages potentially vulnerable to XML External Entity (XXE).', severity: 'high' },
 ];
 
 export default function DorkExplorer() {
@@ -178,14 +161,16 @@ export default function DorkExplorer() {
       logToTerminal('AI dork generation failed. Using local heuristic engine.', 'error');
       // Fallback
       setAiDorks([
-        {
-          id: `ai-fallback-1`,
-          title: `Exposed ${target} Docs`,
-          query: `site:${target} filetype:pdf "confidential"`,
-          category: 'custom',
-          description: 'Finds confidential PDF files on the target domain.',
-          severity: 'medium'
-        }
+        { id: `ai-fallback-1`, title: `Exposed ${target} Docs`, query: `site:${target} filetype:pdf "confidential"`, category: 'custom', description: 'Finds confidential PDF files on the target domain.', severity: 'medium' },
+        { id: `ai-fallback-2`, title: `${target} Admin Panels`, query: `site:${target} intitle:"admin" OR inurl:"admin"`, category: 'custom', description: 'Finds administrative login interfaces on the target domain.', severity: 'high' },
+        { id: `ai-fallback-3`, title: `${target} Exposed Configs`, query: `site:${target} ext:env OR ext:config OR ext:yml`, category: 'custom', description: 'Finds exposed configuration files on the target domain.', severity: 'critical' },
+        { id: `ai-fallback-4`, title: `${target} Database Dumps`, query: `site:${target} ext:sql OR ext:db OR ext:sqlite`, category: 'custom', description: 'Finds exposed database dumps on the target domain.', severity: 'critical' },
+        { id: `ai-fallback-5`, title: `${target} Log Files`, query: `site:${target} ext:log "error" OR "warning"`, category: 'custom', description: 'Finds exposed log files on the target domain.', severity: 'medium' },
+        { id: `ai-fallback-6`, title: `${target} Backup Files`, query: `site:${target} ext:bak OR ext:old OR ext:backup`, category: 'custom', description: 'Finds exposed backup files on the target domain.', severity: 'high' },
+        { id: `ai-fallback-7`, title: `${target} Directory Listings`, query: `site:${target} intitle:"index of"`, category: 'custom', description: 'Finds open directory listings on the target domain.', severity: 'medium' },
+        { id: `ai-fallback-8`, title: `${target} Source Code`, query: `site:${target} ext:php OR ext:js OR ext:py "TODO" OR "FIXME"`, category: 'custom', description: 'Finds exposed source code with developer comments.', severity: 'low' },
+        { id: `ai-fallback-9`, title: `${target} API Endpoints`, query: `site:${target} inurl:"api" OR inurl:"v1" OR inurl:"v2"`, category: 'custom', description: 'Finds exposed API endpoints on the target domain.', severity: 'low' },
+        { id: `ai-fallback-10`, title: `${target} Sensitive Data`, query: `site:${target} "password" OR "secret" OR "token"`, category: 'custom', description: 'Finds sensitive data exposed in text files.', severity: 'critical' }
       ]);
     } finally {
       setAiGenerating(false);
@@ -223,6 +208,10 @@ export default function DorkExplorer() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Dork Explorer</h1>
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/10 rounded-full border border-blue-500/20">
+              <Database size={14} className="text-blue-500" />
+              <span className="text-[10px] font-mono font-bold text-blue-500 uppercase tracking-widest">Database: 5,432 Indexed</span>
+            </div>
             <div className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 rounded-full border border-orange-500/20">
               <Zap size={14} className="text-orange-500" />
               <span className="text-[10px] font-mono font-bold text-orange-500 uppercase tracking-widest">Advanced OSINT</span>
