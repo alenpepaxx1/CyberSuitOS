@@ -1782,36 +1782,87 @@ async function startServer() {
         break;
 
       case 'nmap':
-        const nmapPorts = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3000, 3306, 3389, 5432, 8080, 8443];
-        const nmapResults: any[] = [];
-        
-        await Promise.all(nmapPorts.map(async (port) => {
-          return new Promise((resolve) => {
-            const socket = new net.Socket();
-            socket.setTimeout(1500);
-            socket.on('connect', () => {
-              nmapResults.push({ 
-                port, 
-                service: getServiceName(port), 
-                state: "open",
-                version: `${getServiceName(port)}/1.0 (Simulated)`,
-                script_output: `Detected ${getServiceName(port)} service on port ${port}`
-              });
-              socket.destroy();
-              resolve(null);
-            });
-            socket.on('timeout', () => { socket.destroy(); resolve(null); });
-            socket.on('error', () => { socket.destroy(); resolve(null); });
-            socket.connect(port, hostname);
-          });
-        }));
+        try {
+          const nmapType = req.query.type as string || 'quick';
+          const nmapApiKey = process.env.GEMINI_API_KEY;
+          
+          let portsToScan = [80, 443, 22, 21, 25, 53, 445, 3306, 3389, 5432, 8080, 8443, 3000];
+          if (nmapType === 'full') {
+            portsToScan = [...new Set([...portsToScan, 23, 110, 143, 993, 995, 1723, 3306, 5900, 6379, 27017])];
+          }
 
-        result = {
-          host_status: "Host is up (0.045s latency)",
-          os_info: "Linux 5.4.0-104-generic (Ubuntu)",
-          open_ports: nmapResults.length > 0 ? nmapResults : [{ port: 0, service: "none", state: "closed", version: "N/A", script_output: "No open ports detected in quick scan" }],
-          summary: `Nmap scan report for ${hostname}. Host is up. ${nmapResults.length} ports open. OS detected as Linux. Scan completed in ${(Math.random() * 2 + 1).toFixed(2)} seconds.`
-        };
+          const nmapResults: any[] = [];
+          const limit = pLimit(10); // Limit concurrency
+
+          await Promise.all(portsToScan.map(port => limit(async () => {
+            return new Promise((resolve) => {
+              const socket = new net.Socket();
+              const start = Date.now();
+              socket.setTimeout(1000);
+              
+              socket.on('connect', () => {
+                const duration = Date.now() - start;
+                nmapResults.push({ 
+                  port, 
+                  service: getServiceName(port), 
+                  state: "open",
+                  time: `${duration}ms`
+                });
+                socket.destroy();
+                resolve(null);
+              });
+              
+              socket.on('timeout', () => { socket.destroy(); resolve(null); });
+              socket.on('error', () => { socket.destroy(); resolve(null); });
+              socket.connect(port, hostname);
+            });
+          })));
+
+          let aiIntelligence: any = null;
+          if (isValidApiKey(nmapApiKey) && nmapResults.length > 0) {
+            try {
+              const ai = new GoogleGenAI({ apiKey: nmapApiKey! });
+              const nmapPrompt = `Perform an advanced Nmap-style analysis for the target: ${hostname}.
+              Detected open ports: ${nmapResults.map(r => r.port).join(', ')}.
+              Scan type: ${nmapType}.
+              
+              Generate a JSON object with:
+              - 'os_info': A detailed OS guess (e.g., 'Linux 5.10.0-kali (Debian)', 'Windows Server 2022').
+              - 'host_status': A status string with latency (e.g., 'Host is up (0.002s latency)').
+              - 'port_details': An array of objects for each open port:
+                - 'port': The port number.
+                - 'version': A realistic service version (e.g., 'nginx 1.18.0', 'OpenSSH 8.2p1').
+                - 'script_output': A simulated NSE script output (e.g., 'http-title: Welcome to Nginx', 'ssh-hostkey: 2048 ...').
+              - 'summary': A technical summary of the scan findings.`;
+
+              const aiResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: nmapPrompt,
+                config: { responseMimeType: "application/json" }
+              });
+              aiIntelligence = JSON.parse(aiResponse.text || '{}');
+            } catch (e) {
+              console.error("[Scanner] Nmap AI analysis failed:", e);
+            }
+          }
+
+          result = {
+            host_status: aiIntelligence?.host_status || "Host is up (0.045s latency)",
+            os_info: aiIntelligence?.os_info || (nmapType === 'os' ? "Linux 5.4.0-104-generic (Ubuntu)" : "Unknown"),
+            open_ports: nmapResults.map(r => {
+              const details = aiIntelligence?.port_details?.find((d: any) => d.port === r.port);
+              return {
+                ...r,
+                version: details?.version || `${r.service}/1.0 (Simulated)`,
+                script_output: details?.script_output || `Detected ${r.service} service on port ${r.port}`
+              };
+            }),
+            summary: aiIntelligence?.summary || `Nmap scan report for ${hostname}. Host is up. ${nmapResults.length} ports open. Scan completed in ${(Math.random() * 2 + 1).toFixed(2)} seconds.`
+          };
+        } catch (e: any) {
+          console.error("[Scanner] Nmap failed:", e);
+          result = { error: "Nmap scan failed", details: e.message };
+        }
         break;
 
       case 'tech':
