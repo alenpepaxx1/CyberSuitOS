@@ -15,6 +15,7 @@ export default function Terminal() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isOpen, setIsOpen] = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
   const [input, setInput] = useState('');
   const [history, setHistory] = useState<string[]>(() => {
     const saved = localStorage.getItem('terminal_history');
@@ -253,10 +254,17 @@ export default function Terminal() {
         message: e.detail.message,
       };
       setLogs(prev => [...prev.slice(-49), newLog]);
+      if (!isOpen) setIsOpen(true);
     };
 
+    const handleOpen = () => setIsOpen(true);
+
     window.addEventListener('terminal-log', handleLog);
-    return () => window.removeEventListener('terminal-log', handleLog);
+    window.addEventListener('terminal-open', handleOpen);
+    return () => {
+      window.removeEventListener('terminal-log', handleLog);
+      window.removeEventListener('terminal-open', handleOpen);
+    };
   }, []);
 
   useEffect(() => {
@@ -269,27 +277,67 @@ export default function Terminal() {
 
   return (
     <motion.div
-      initial={{ y: 300 }}
-      animate={{ y: isMinimized ? 260 : 0 }}
+      initial={{ y: 300, opacity: 0 }}
+      animate={{ 
+        y: isMinimized ? 260 : 0, 
+        opacity: 1,
+        width: isMaximized ? 'calc(100vw - 64px)' : '450px',
+        height: isMinimized ? '40px' : (isMaximized ? 'calc(100vh - 128px)' : '384px'),
+        x: isMaximized ? '-50%' : '0%',
+        left: isMaximized ? '50%' : 'auto',
+        right: isMaximized ? 'auto' : '32px',
+        bottom: isMaximized ? '64px' : '32px'
+      }}
+      transition={{ type: "spring", damping: 20, stiffness: 100 }}
       className={cn(
-        "fixed bottom-8 right-8 w-[450px] bg-black/90 border border-[#00FF41]/30 rounded-xl overflow-hidden z-50 shadow-[0_0_30px_rgba(0,255,65,0.15)] backdrop-blur-xl",
-        "before:absolute before:inset-0 before:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(0,255,65,0.06),rgba(0,255,65,0.02),rgba(0,255,65,0.06))] before:bg-[length:100%_2px,3px_100%] before:pointer-events-none before:z-10",
-        isMinimized ? "h-10" : "h-96"
+        "fixed bg-black/95 border border-[#00FF41]/40 rounded-xl overflow-hidden z-50 shadow-[0_0_50px_rgba(0,255,65,0.2)] backdrop-blur-2xl",
+        "before:absolute before:inset-0 before:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(0,255,65,0.06),rgba(0,255,65,0.02),rgba(0,255,65,0.06))] before:bg-[length:100%_2px,3px_100%] before:pointer-events-none before:z-10"
       )}
     >
       {/* Scanline Effect */}
       <div className="absolute inset-0 pointer-events-none z-20 bg-[radial-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_100%),linear-gradient(transparent_0%,rgba(0,255,65,0.05)_2%,transparent_3%)] bg-[length:100%_100%,100%_100px] animate-scanline" />
       {/* Header */}
-      <div className="h-10 bg-black/80 border-b border-[#00FF41]/30 flex items-center justify-between px-4 cursor-pointer shadow-[inset_0_0_15px_rgba(0,255,65,0.05)]" onClick={() => setIsMinimized(!isMinimized)}>
+      <div 
+        className="h-10 bg-black/80 border-b border-[#00FF41]/30 flex items-center justify-between px-4 cursor-move shadow-[inset_0_0_15px_rgba(0,255,65,0.05)]"
+        onDoubleClick={() => {
+          if (isMinimized) setIsMinimized(false);
+          else setIsMaximized(!isMaximized);
+        }}
+      >
         <div className="flex items-center gap-2">
           <TerminalIcon size={14} className="text-[#00FF41] drop-shadow-[0_0_5px_currentColor]" />
-          <span className="text-[10px] font-mono text-[#00FF41] uppercase tracking-widest drop-shadow-[0_0_2px_currentColor]">System Console</span>
+          <span className="text-[10px] font-mono text-[#00FF41] uppercase tracking-widest drop-shadow-[0_0_2px_currentColor] font-bold">System Console v1.0.4</span>
+          {isMaximized && <span className="text-[8px] font-mono text-[#00FF41]/40 uppercase ml-2 tracking-tighter">[MAXIMIZED MODE]</span>}
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={(e) => { e.stopPropagation(); setIsMinimized(!isMinimized); }} className="text-[#00FF41]/50 hover:text-[#00FF41] transition-colors">
-            {isMinimized ? <Maximize2 size={12} /> : <Minimize2 size={12} />}
+        <div className="flex items-center gap-1">
+          <button 
+            onClick={() => {
+              setIsMinimized(!isMinimized);
+              if (isMaximized) setIsMaximized(false);
+            }} 
+            className="p-1.5 text-[#00FF41]/50 hover:text-[#00FF41] hover:bg-[#00FF41]/10 rounded transition-all"
+            title={isMinimized ? "Restore" : "Minimize"}
+          >
+            <Minimize2 size={12} />
           </button>
-          <button onClick={(e) => { e.stopPropagation(); setIsOpen(false); }} className="text-[#00FF41]/50 hover:text-red-500 transition-colors">
+          <button 
+            onClick={() => {
+              setIsMaximized(!isMaximized);
+              if (isMinimized) setIsMinimized(false);
+            }} 
+            className="p-1.5 text-[#00FF41]/50 hover:text-[#00FF41] hover:bg-[#00FF41]/10 rounded transition-all"
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            <Maximize2 size={12} />
+          </button>
+          <button 
+            onClick={() => {
+              setIsOpen(false);
+              window.dispatchEvent(new CustomEvent('terminal-closed'));
+            }} 
+            className="p-1.5 text-[#00FF41]/50 hover:text-red-500 hover:bg-red-500/10 rounded transition-all"
+            title="Close"
+          >
             <X size={12} />
           </button>
         </div>
