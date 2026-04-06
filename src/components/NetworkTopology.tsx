@@ -290,10 +290,56 @@ export default function NetworkTopology() {
     svg.call(zoom);
 
     const simulation = d3.forceSimulation<Node>(nodes)
-      .force('link', d3.forceLink<Node, Link>(links).id(d => d.id).distance(150))
-      .force('charge', d3.forceManyBody().strength(-800))
+      .alphaDecay(0.05)
+      .force('link', d3.forceLink<Node, Link>(links).id(d => d.id).distance(100))
+      .force('charge', d3.forceManyBody().strength(-600))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(60));
+      .force('x', d3.forceX(width / 2).strength(0.2))
+      .force('y', d3.forceY((d: any) => {
+        const id = d.id;
+        if (id === 'internet') return height * 0.15;
+        if (id === 'ext-fw') return height * 0.3;
+        if (['dmz-switch', 'web-01', 'web-02', 'vpn-gw'].includes(id)) return height * 0.45;
+        if (id === 'int-fw') return height * 0.6;
+        if (id === 'core-switch') return height * 0.75;
+        return height * 0.9;
+      }).strength(2.5))
+      .force('collision', d3.forceCollide().radius(70));
+
+    // Layer Labels
+    const layers = [
+      { y: height * 0.15, label: 'External / WAN' },
+      { y: height * 0.3, label: 'Edge Security' },
+      { y: height * 0.45, label: 'DMZ / Public Services' },
+      { y: height * 0.6, label: 'Internal Security' },
+      { y: height * 0.75, label: 'Core Infrastructure' },
+      { y: height * 0.9, label: 'Internal Assets' }
+    ];
+
+    mainG.selectAll('.layer-indicator').remove();
+    const layerGroup = mainG.append('g').attr('class', 'layer-indicator').lower();
+    
+    layers.forEach(layer => {
+      layerGroup.append('line')
+        .attr('x1', -width)
+        .attr('y1', layer.y)
+        .attr('x2', width * 2)
+        .attr('y2', layer.y)
+        .attr('stroke', '#06b6d4')
+        .attr('stroke-width', 0.5)
+        .attr('stroke-dasharray', '5,10')
+        .attr('opacity', 0.1);
+
+      layerGroup.append('text')
+        .attr('x', 20)
+        .attr('y', layer.y - 10)
+        .attr('fill', '#06b6d4')
+        .attr('font-size', '8px')
+        .attr('font-family', 'monospace')
+        .attr('opacity', 0.3)
+        .attr('text-anchor', 'start')
+        .text(layer.label.toUpperCase());
+    });
 
     // Links
     const link = linkGroup
@@ -316,10 +362,12 @@ export default function NetworkTopology() {
         if (Math.random() > 0.1) {
           const isCompromised = source.status === 'compromised' || target.status === 'compromised';
           const pG = packetGroup.append('g');
+          // Slower, more rhythmic packets
+          const duration = 4 + Math.random() * 4;
           pG.append('circle').attr('r', isCompromised ? 3 : 2).attr('fill', isCompromised ? '#ef4444' : '#06b6d4').attr('filter', 'url(#glow)')
-            .append('animateMotion').attr('dur', `${3 + Math.random() * 3}s`).attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
+            .append('animateMotion').attr('dur', `${duration}s`).attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
           pG.append('circle').attr('r', isCompromised ? 2 : 1.5).attr('fill', isCompromised ? '#ef4444' : '#06b6d4').attr('opacity', 0.5)
-            .append('animateMotion').attr('dur', `${3 + Math.random() * 3}s`).attr('begin', '0.1s').attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
+            .append('animateMotion').attr('dur', `${duration}s`).attr('begin', '0.2s').attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
         }
       });
     };
@@ -337,7 +385,7 @@ export default function NetworkTopology() {
       .attr('filter', 'url(#glow)');
 
     attackLine
-      .style('animation', 'attack-dash 1s linear infinite');
+      .style('animation', 'attack-dash 2s linear infinite');
 
     // Nodes
     const node = nodeGroup
@@ -384,11 +432,11 @@ export default function NetworkTopology() {
       .attr('stroke', '#ef4444')
       .attr('stroke-width', 2)
       .style('transform-origin', '0 0')
-      .style('animation', 'pulse-ring 2.5s ease-out infinite');
+      .style('animation', 'pulse-ring 3s ease-out infinite');
 
     // Glitch effect for compromised nodes
     node.filter(d => d.status === 'compromised')
-      .style('animation', 'glitch-flicker 2s ease-in-out infinite');
+      .style('animation', 'glitch-flicker 3s ease-in-out infinite');
 
     // Node background
     node.append('circle')
@@ -447,10 +495,14 @@ export default function NetworkTopology() {
 
     simulation.on('tick', () => {
       link.attr('d', (d: any) => {
-        const dx = d.target.x - d.source.x;
-        const dy = d.target.y - d.source.y;
-        const dr = Math.sqrt(dx * dx + dy * dy) * 1.5; // Curve radius
-        return `M${d.source.x},${d.source.y}A${dr},${dr} 0 0,1 ${d.target.x},${d.target.y}`;
+        const sourceX = d.source.x;
+        const sourceY = d.source.y;
+        const targetX = d.target.x;
+        const targetY = d.target.y;
+        
+        // Use a more structured "schematic" curve
+        const midY = (sourceY + targetY) / 2;
+        return `M${sourceX},${sourceY} C${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
       });
 
       node
