@@ -1497,12 +1497,21 @@ async function startServer() {
         if (hostname === 'localhost' || hostname === '127.0.0.1') {
           result = {
             subject: { CN: 'localhost' },
-            issuer: { CN: 'Self-Signed' },
+            issuer: { CN: 'Self-Signed (Local Development)' },
             valid_from: new Date().toISOString(),
             valid_to: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
             fingerprint: 'LOCAL-CERT-FINGERPRINT',
             status: "Internal/Self-Signed",
-            vulnerabilities: ["Local development environment detected"]
+            grade: "A",
+            vulnerabilities: ["Local development environment detected"],
+            protocol: "TLSv1.3",
+            cipher: "TLS_AES_256_GCM_SHA384",
+            hsts: { enabled: false, detail: "HSTS not recommended for local development" },
+            details: {
+              keyType: "RSA (2048 bits)",
+              serialNumber: "00:DE:AD:BE:EF",
+              sigAlg: "sha256WithRSAEncryption"
+            }
           };
           break;
         }
@@ -1517,26 +1526,59 @@ async function startServer() {
           result = await new Promise((resolve, reject) => {
             const req = https.request(options, (httpsRes) => {
               const cert = (httpsRes.socket as any).getPeerCertificate(true);
+              const cipher = (httpsRes.socket as any).getCipher ? (httpsRes.socket as any).getCipher() : null;
+              const protocol = (httpsRes.socket as any).getProtocol ? (httpsRes.socket as any).getProtocol() : 'Unknown';
+              const hstsHeader = httpsRes.headers['strict-transport-security'];
+
               if (cert && Object.keys(cert).length > 0) {
                 const validTo = new Date(cert.valid_to);
                 const isValid = validTo > new Date();
+                const vulnerabilities: string[] = [];
+                let grade = "A";
+
+                if (!isValid) {
+                  vulnerabilities.push("Certificate is expired");
+                  grade = "F";
+                }
+                
+                if (cert.sigalg && (cert.sigalg.includes('md5') || cert.sigalg.includes('sha1'))) {
+                  vulnerabilities.push(`Weak signature algorithm: ${cert.sigalg}`);
+                  grade = grade === "F" ? "F" : "C";
+                }
+
+                if (protocol === 'TLSv1' || protocol === 'TLSv1.1' || protocol === 'SSLv3' || protocol === 'SSLv2') {
+                  vulnerabilities.push(`Insecure protocol version: ${protocol}`);
+                  grade = "F";
+                }
+
+                if (cipher && (cipher.bits < 128)) {
+                  vulnerabilities.push(`Weak cipher strength: ${cipher.name} (${cipher.bits} bits)`);
+                  grade = grade === "F" ? "F" : "C";
+                }
+
                 const sslData = {
                   subject: cert.subject,
                   issuer: cert.issuer,
                   valid_from: cert.valid_from,
                   valid_to: cert.valid_to,
                   fingerprint: cert.fingerprint,
-                  status: isValid ? "Valid" : "Expired/Invalid",
-                  vulnerabilities: [] as string[],
-                  cipher: (httpsRes.socket as any).getCipher ? (httpsRes.socket as any).getCipher().name : 'Unknown',
-                  protocol: (httpsRes.socket as any).getProtocol ? (httpsRes.socket as any).getProtocol() : 'Unknown'
+                  status: grade === "F" ? "Expired/Invalid" : (grade === "C" ? "Weak" : "Valid"),
+                  grade: grade,
+                  vulnerabilities: vulnerabilities,
+                  cipher: cipher ? `${cipher.name} (${cipher.bits} bits)` : 'Unknown',
+                  protocol: protocol,
+                  hsts: {
+                    enabled: !!hstsHeader,
+                    detail: hstsHeader ? `HSTS enabled: ${hstsHeader}` : "HSTS not enabled. Risk of protocol downgrade attacks."
+                  },
+                  details: {
+                    keyType: cert.pubkey ? `${cert.pubkey.type || 'Unknown'} (${cert.bits || 'Unknown'} bits)` : 'Unknown',
+                    serialNumber: cert.serialNumber,
+                    sigAlg: cert.sigalg,
+                    asn1Curve: cert.asn1Curve,
+                    nistCurve: cert.nistCurve
+                  }
                 };
-                if (!isValid) sslData.vulnerabilities.push("Certificate is expired");
-                
-                if (cert.sigalg && (cert.sigalg.includes('md5') || cert.sigalg.includes('sha1'))) {
-                  sslData.vulnerabilities.push(`Weak signature algorithm: ${cert.sigalg}`);
-                  sslData.status = "Insecure";
-                }
                 
                 httpsRes.destroy();
                 resolve(sslData);
