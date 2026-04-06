@@ -363,58 +363,87 @@ async function startServer() {
     });
   });
 
-  // Network Topology API
-  app.get("/api/network", (req, res) => {
-    const nodes: any[] = [
-      { id: 'internet', type: 'cloud', status: 'secure', label: 'Global WAN', ip: '8.8.8.8' },
-      { id: 'ext-fw', type: 'firewall', status: 'secure', label: 'External Edge FW', ip: '172.16.0.1' },
-      { id: 'dmz-switch', type: 'router', status: 'secure', label: 'DMZ Switch', ip: '192.168.1.1' },
-      { id: 'web-01', type: 'server', status: 'vulnerable', label: 'Public Web Server A', ip: '192.168.1.10' },
-      { id: 'web-02', type: 'server', status: 'secure', label: 'Public Web Server B', ip: '192.168.1.11' },
-      { id: 'vpn-gw', type: 'router', status: 'secure', label: 'VPN Gateway', ip: '192.168.1.20' },
-      { id: 'int-fw', type: 'firewall', status: 'secure', label: 'Internal Core FW', ip: '10.0.0.1' },
-      { id: 'core-switch', type: 'router', status: 'secure', label: 'Core Switch', ip: '10.0.0.2' },
-      { id: 'db-cluster', type: 'database', status: 'secure', label: 'Primary DB Cluster', ip: '10.0.1.50' },
-      { id: 'db-replica', type: 'database', status: 'secure', label: 'DB Replica', ip: '10.0.1.51' },
-      { id: 'app-01', type: 'server', status: 'secure', label: 'App Server 01', ip: '10.0.2.10' },
-      { id: 'app-02', type: 'server', status: 'secure', label: 'App Server 02', ip: '10.0.2.11' },
-      { id: 'nas-01', type: 'server', status: 'vulnerable', label: 'Legacy NAS', ip: '10.0.3.100' },
-      { id: 'iot-gw', type: 'iot', status: 'compromised', label: 'IoT Gateway', ip: '10.0.4.5' },
-      { id: 'iot-sensor-1', type: 'iot', status: 'compromised', label: 'HVAC Sensor A', ip: '10.0.4.10' },
-      { id: 'iot-sensor-2', type: 'iot', status: 'vulnerable', label: 'HVAC Sensor B', ip: '10.0.4.11' },
-      { id: 'workstation-vlan', type: 'router', status: 'secure', label: 'User VLAN Switch', ip: '10.1.0.1' },
-      { id: 'ws-01', type: 'laptop', status: 'secure', label: 'CEO Laptop', ip: '10.1.0.50' },
-      { id: 'ws-02', type: 'laptop', status: 'vulnerable', label: 'Dev Workstation', ip: '10.1.0.51' },
-      { id: 'ws-03', type: 'laptop', status: 'secure', label: 'HR Desktop', ip: '10.1.0.52' },
-      { id: 'ws-04', type: 'laptop', status: 'compromised', label: 'Guest Kiosk', ip: '10.1.0.99' },
-    ];
-    const links: any[] = [
-      { source: 'internet', target: 'ext-fw' },
-      { source: 'ext-fw', target: 'dmz-switch' },
-      { source: 'dmz-switch', target: 'web-01' },
-      { source: 'dmz-switch', target: 'web-02' },
-      { source: 'dmz-switch', target: 'vpn-gw' },
-      { source: 'dmz-switch', target: 'int-fw' },
-      { source: 'int-fw', target: 'core-switch' },
-      { source: 'core-switch', target: 'db-cluster' },
-      { source: 'db-cluster', target: 'db-replica' },
-      { source: 'core-switch', target: 'app-01' },
-      { source: 'core-switch', target: 'app-02' },
-      { source: 'app-01', target: 'db-cluster' },
-      { source: 'app-02', target: 'db-cluster' },
-      { source: 'core-switch', target: 'nas-01' },
-      { source: 'core-switch', target: 'iot-gw' },
-      { source: 'iot-gw', target: 'iot-sensor-1' },
-      { source: 'iot-gw', target: 'iot-sensor-2' },
-      { source: 'core-switch', target: 'workstation-vlan' },
-      { source: 'workstation-vlan', target: 'ws-01' },
-      { source: 'workstation-vlan', target: 'ws-02' },
-      { source: 'workstation-vlan', target: 'ws-03' },
-      { source: 'workstation-vlan', target: 'ws-04' },
-      { source: 'vpn-gw', target: 'workstation-vlan' }, // VPN access to user vlan
-    ];
+  // Network Topology State Management
+  let networkState = {
+    nodes: [
+      { id: 'internet', type: 'cloud', status: 'secure', label: 'Global WAN', ip: '8.8.8.8', os: 'Cisco IOS-XE', uptime: '342d 12h', traffic: 85, threatLevel: 5 },
+      { id: 'ext-fw', type: 'firewall', status: 'secure', label: 'Edge Firewall', ip: '172.16.0.1', os: 'FortiOS 7.2', uptime: '124d 05h', traffic: 45, threatLevel: 10 },
+      { id: 'dmz-switch', type: 'router', status: 'secure', label: 'DMZ Switch', ip: '192.168.1.1', os: 'Arista EOS', uptime: '89d 14h', traffic: 30, threatLevel: 5 },
+      { id: 'web-01', type: 'server', status: 'vulnerable', label: 'Web Server Alpha', ip: '192.168.1.10', os: 'Ubuntu 22.04 LTS', uptime: '12d 03h', traffic: 65, threatLevel: 45 },
+      { id: 'web-02', type: 'server', status: 'secure', label: 'Web Server Beta', ip: '192.168.1.11', os: 'CentOS Stream 9', uptime: '45d 11h', traffic: 55, threatLevel: 15 },
+      { id: 'vpn-gw', type: 'router', status: 'secure', label: 'VPN Gateway', ip: '192.168.1.20', os: 'OpenBSD 7.4', uptime: '210d 08h', traffic: 25, threatLevel: 20 },
+      { id: 'int-fw', type: 'firewall', status: 'secure', label: 'Internal Core FW', ip: '10.0.0.1', os: 'Palo Alto PAN-OS', uptime: '156d 19h', traffic: 40, threatLevel: 5 },
+      { id: 'core-switch', type: 'router', status: 'secure', label: 'Core Switch', ip: '10.0.0.2', os: 'Juniper Junos', uptime: '312d 22h', traffic: 90, threatLevel: 5 },
+      { id: 'db-cluster', type: 'database', status: 'secure', label: 'Main DB Cluster', ip: '10.0.1.50', os: 'PostgreSQL 15 (Alpine)', uptime: '67d 04h', traffic: 75, threatLevel: 10 },
+      { id: 'app-01', type: 'server', status: 'secure', label: 'App Server 01', ip: '10.0.2.10', os: 'Debian 12', uptime: '14d 06h', traffic: 50, threatLevel: 15 },
+      { id: 'iot-gw', type: 'iot', status: 'compromised', label: 'IoT Gateway', ip: '10.0.4.5', os: 'FreeRTOS', uptime: '2d 01h', traffic: 95, threatLevel: 95 },
+      { id: 'ws-01', type: 'laptop', status: 'secure', label: 'Admin Workstation', ip: '10.1.0.50', os: 'macOS 14.2', uptime: '5h 12m', traffic: 15, threatLevel: 5 },
+      { id: 'ws-04', type: 'laptop', status: 'compromised', label: 'Guest Kiosk', ip: '10.1.0.99', os: 'Windows 10 Home', uptime: '1d 22h', traffic: 80, threatLevel: 85 },
+    ],
+    links: [
+      { source: 'internet', target: 'ext-fw', active: true },
+      { source: 'ext-fw', target: 'dmz-switch', active: true },
+      { source: 'dmz-switch', target: 'web-01', active: true },
+      { source: 'dmz-switch', target: 'web-02', active: true },
+      { source: 'dmz-switch', target: 'vpn-gw', active: true },
+      { source: 'dmz-switch', target: 'int-fw', active: true },
+      { source: 'int-fw', target: 'core-switch', active: true },
+      { source: 'core-switch', target: 'db-cluster', active: true },
+      { source: 'core-switch', target: 'app-01', active: true },
+      { source: 'core-switch', target: 'iot-gw', active: true },
+      { source: 'core-switch', target: 'ws-01', active: true },
+      { source: 'core-switch', target: 'ws-04', active: true },
+    ]
+  };
 
-    res.json({ nodes, links });
+  app.get("/api/network", (req, res) => {
+    // Randomly fluctuate traffic and threat levels slightly for realism
+    const dynamicNodes = networkState.nodes.map(node => ({
+      ...node,
+      traffic: Math.max(5, Math.min(100, node.traffic + (Math.random() * 10 - 5))),
+      threatLevel: node.status === 'compromised' ? 90 + Math.random() * 10 : 
+                   node.status === 'vulnerable' ? 30 + Math.random() * 40 : 
+                   Math.random() * 15
+    }));
+    res.json({ nodes: dynamicNodes, links: networkState.links });
+  });
+
+  app.post("/api/network/action", async (req, res) => {
+    const { nodeId, action } = req.body;
+    const node = networkState.nodes.find(n => n.id === nodeId);
+    
+    if (!node) return res.status(404).json({ error: "Node not found" });
+
+    let message = "";
+    if (action === 'isolate') {
+      node.status = 'secure'; // Simplified: isolation "fixes" it for the demo
+      networkState.links = networkState.links.filter(l => l.source !== nodeId && l.target !== nodeId);
+      message = `Node ${nodeId} has been logically isolated from the network core.`;
+    } else if (action === 'remediate') {
+      node.status = 'secure';
+      node.threatLevel = 5;
+      message = `Security patches applied to ${nodeId}. Vulnerabilities mitigated.`;
+    } else if (action === 'scan') {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (isValidApiKey(apiKey)) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: apiKey! });
+          const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: `Perform a deep security analysis of this network node: 
+            Label: ${node.label}, IP: ${node.ip}, OS: ${node.os}, Status: ${node.status}.
+            Provide a detailed threat report in 3-4 sentences.`,
+          });
+          message = response.text || "Scan complete. No new threats identified.";
+        } catch (e) {
+          message = "AI Scan failed. Local heuristics suggest potential lateral movement risks.";
+        }
+      } else {
+        message = "Deep scan complete. Heuristic analysis suggests the node is currently " + node.status;
+      }
+    }
+
+    res.json({ success: true, message, node });
   });
 
   // Advanced Vulnerability Scanner API
