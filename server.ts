@@ -684,6 +684,7 @@ async function startServer() {
         // 2. Port Scanning
         (async () => {
           const portsToScan = [80, 443, 22, 21, 25, 53, 3000, 8080, 8443, 3306, 5432, 27017];
+          const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
           const scanPort = (port: number) => {
             return new Promise((resolve) => {
               const socket = new net.Socket();
@@ -695,7 +696,7 @@ async function startServer() {
               });
               socket.on('timeout', () => { socket.destroy(); resolve(null); });
               socket.on('error', () => { socket.destroy(); resolve(null); });
-              socket.connect(port, hostname);
+              socket.connect(port, scanHost);
             });
           };
           await Promise.all(portsToScan.map(scanPort));
@@ -925,7 +926,7 @@ async function startServer() {
       21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
       80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB',
       465: 'SMTPS', 587: 'SMTP-Submission', 993: 'IMAPS', 995: 'POP3S',
-      1433: 'MSSQL', 1521: 'Oracle', 2049: 'NFS', 3306: 'MySQL',
+      1433: 'MSSQL', 1521: 'Oracle', 2049: 'NFS', 3000: 'CyberSuite-API', 3306: 'MySQL',
       3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis',
       8080: 'HTTP-Proxy', 8443: 'HTTPS-Alt', 9000: 'PHP-FPM',
       9200: 'Elasticsearch', 27017: 'MongoDB'
@@ -1116,36 +1117,60 @@ async function startServer() {
         ];
         const portResults: any[] = [];
         
+        // Use 127.0.0.1 for localhost to avoid IPv6 issues
+        const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
+        
         const limit = pLimit(20); // Limit to 20 concurrent port scans
         await Promise.all(commonPorts.map(port => limit(() => {
           return new Promise((resolve) => {
             const socket = new net.Socket();
             socket.setTimeout(1500);
             socket.on('connect', () => {
-              console.log(`[Scanner] Port ${port} is open on ${hostname}`);
-              portResults.push({ 
-                port, 
-                service: getServiceName(port), 
-                state: 'open', 
-                version: 'Detected',
-                banner: '' // Could try to grab banner here
+              console.log(`[Scanner] Port ${port} is open on ${scanHost}`);
+              
+              // Attempt banner grabbing for open ports
+              let banner = '';
+              const bannerSocket = new net.Socket();
+              bannerSocket.setTimeout(2000);
+              bannerSocket.connect(port, scanHost, () => {
+                // Some services send banner on connect (SSH, FTP)
               });
-              socket.destroy();
-              resolve(null);
+              
+              bannerSocket.on('data', (data) => {
+                banner = data.toString().trim().substring(0, 100);
+                bannerSocket.destroy();
+              });
+              
+              bannerSocket.on('error', () => bannerSocket.destroy());
+              bannerSocket.on('timeout', () => bannerSocket.destroy());
+              
+              // Wait a bit for banner
+              setTimeout(() => {
+                portResults.push({ 
+                  port, 
+                  service: getServiceName(port), 
+                  state: 'open', 
+                  version: banner ? 'Detected' : 'Unknown',
+                  banner: banner || '' 
+                });
+                socket.destroy();
+                bannerSocket.destroy();
+                resolve(null);
+              }, 1000);
             });
             socket.on('timeout', () => {
-              console.log(`[Scanner] Port ${port} timed out on ${hostname}`);
+              console.log(`[Scanner] Port ${port} timed out on ${scanHost}`);
               portResults.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
               socket.destroy();
               resolve(null);
             });
             socket.on('error', (err) => {
-              console.log(`[Scanner] Port ${port} error on ${hostname}:`, err.message);
+              console.log(`[Scanner] Port ${port} error on ${scanHost}:`, err.message);
               portResults.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
               socket.destroy();
               resolve(null);
             });
-            socket.connect(port, hostname);
+            socket.connect(port, scanHost);
           });
         })));
         result = portResults.sort((a, b) => a.port - b.port);
