@@ -34,7 +34,7 @@ import { fetchAiGenerate } from '../lib/ai-fetch';
 
 export default function NetworkTool() {
   const { toolTarget, setToolTarget } = useSystem();
-  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map' | 'subdomains' | 'graph' | 'ports' | 'darkweb'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'dns' | 'whois' | 'threat' | 'map' | 'subdomains' | 'graph' | 'ports' | 'darkweb' | 'tech'>('info');
   const [scanData, setScanData] = useState<any>(null);
   const [scanning, setScanning] = useState(false);
   const [query, setQuery] = useState(toolTarget || '');
@@ -49,6 +49,8 @@ export default function NetworkTool() {
   const [portScanning, setPortScanning] = useState(false);
   const [darkWebResults, setDarkWebResults] = useState<any[]>([]);
   const [darkWebScanning, setDarkWebScanning] = useState(false);
+  const [techResults, setTechResults] = useState<any[]>([]);
+  const [techLoading, setTechLoading] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -156,27 +158,43 @@ export default function NetworkTool() {
     if (activeTab === 'darkweb' && result && !darkWebResults.length && !darkWebScanning) {
       runDarkWebScan();
     }
+    if (activeTab === 'tech' && result && !techResults.length && !techLoading) {
+      fetchTechStack();
+    }
   }, [activeTab, result]);
+
+  const fetchTechStack = async () => {
+    if (!result?.query) return;
+    setTechLoading(true);
+    logToTerminal(`Detecting technology stack for: ${result.query}`, 'info');
+    try {
+      const res = await fetch(`/api/tools/tech?target=${result.query}`);
+      const data = await res.json();
+      setTechResults(data);
+      logToTerminal(`Technology detection complete for ${result.query}. Found ${data.length} components.`, 'success');
+    } catch (err) {
+      logToTerminal(`Tech detection failed: ${err}`, 'error');
+    } finally {
+      setTechLoading(false);
+    }
+  };
 
   const runPortScan = async () => {
     if (!result?.query) return;
     setPortScanning(true);
     logToTerminal(`Initiating deep port scan for: ${result.query}`, 'info');
     
-    // Simulate port scanning
-    setTimeout(() => {
-      const commonPorts = [
-        { port: 21, service: 'FTP', state: 'closed', banner: '' },
-        { port: 22, service: 'SSH', state: 'open', banner: 'OpenSSH 8.2p1 Ubuntu 4ubuntu0.5' },
-        { port: 80, service: 'HTTP', state: 'open', banner: 'nginx/1.18.0' },
-        { port: 443, service: 'HTTPS', state: 'open', banner: 'nginx/1.18.0' },
-        { port: 3306, service: 'MySQL', state: 'filtered', banner: '' },
-        { port: 8080, service: 'HTTP-Proxy', state: 'closed', banner: '' },
-      ];
-      setPortScanResults(commonPorts);
+    try {
+      const res = await fetch(`/api/tools/ports?target=${result.query}`);
+      const data = await res.json();
+      setPortScanResults(data);
+      const openCount = data.filter((p: any) => p.state === 'open').length;
+      logToTerminal(`Port scan complete for ${result.query}. Found ${openCount} open ports.`, 'success');
+    } catch (err) {
+      logToTerminal(`Port scan failed: ${err}`, 'error');
+    } finally {
       setPortScanning(false);
-      logToTerminal(`Port scan complete for ${result.query}. Found 3 open ports.`, 'success');
-    }, 2500);
+    }
   };
 
   const runDarkWebScan = async () => {
@@ -184,16 +202,16 @@ export default function NetworkTool() {
     setDarkWebScanning(true);
     logToTerminal(`Scanning dark web forums and paste sites for: ${result.query}`, 'info');
     
-    // Simulate dark web scan
-    setTimeout(() => {
-      const mentions = [
-        { source: 'BreachForums', date: '2023-10-15', threatLevel: 'high', snippet: `...database dump containing references to ${result.query}...` },
-        { source: 'Pastebin', date: '2024-01-22', threatLevel: 'medium', snippet: `...config files leaked, IP ${result.query} exposed...` },
-      ];
-      setDarkWebResults(mentions);
+    try {
+      const res = await fetch(`/api/tools/darkweb?target=${result.query}`);
+      const data = await res.json();
+      setDarkWebResults(data);
+      logToTerminal(`Dark web scan complete. Found ${data.length} potential mentions.`, 'warn');
+    } catch (err) {
+      logToTerminal(`Dark web scan failed: ${err}`, 'error');
+    } finally {
       setDarkWebScanning(false);
-      logToTerminal(`Dark web scan complete. Found ${mentions.length} mentions.`, 'warn');
-    }, 3000);
+    }
   };
 
   const exportReport = () => {
@@ -437,6 +455,7 @@ export default function NetworkTool() {
                   { id: 'whois', label: 'WHOIS Data', icon: Database },
                   { id: 'threat', label: 'Threat Intel', icon: Shield },
                   { id: 'ports', label: 'Port Scan', icon: TerminalIcon },
+                  { id: 'tech', label: 'Tech Stack', icon: Cpu },
                   { id: 'darkweb', label: 'Dark Web', icon: Eye },
                   { id: 'map', label: 'Geo Map', icon: MapPin },
                   { id: 'graph', label: 'Infrastructure', icon: Activity },
@@ -767,7 +786,7 @@ export default function NetworkTool() {
                                       {port.state.toUpperCase()}
                                     </span>
                                   </td>
-                                  <td className="px-4 py-3 text-[10px] font-mono text-gray-400">{port.banner || 'N/A'}</td>
+                                  <td className="px-4 py-3 text-[10px] font-mono text-gray-400">{port.banner || port.version || 'N/A'}</td>
                                 </tr>
                               ))
                             ) : (
@@ -780,6 +799,104 @@ export default function NetworkTool() {
                           </tbody>
                         </table>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'threat' && (
+                  <div className="space-y-6">
+                    <div className="flex items-center gap-3 text-red-400">
+                      <Shield size={18} />
+                      <span className="text-xs font-mono uppercase tracking-widest">Threat Intelligence & Vulnerabilities</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 gap-4">
+                      {result.vulnerabilities && result.vulnerabilities.length > 0 ? (
+                        result.vulnerabilities.map((vuln: any, i: number) => (
+                          <div key={i} className="bg-black/20 border border-cyber-border p-5 rounded-xl space-y-3 hover:border-red-500/30 transition-colors">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <AlertTriangle size={14} className={cn(
+                                  vuln.severity === 'critical' ? "text-red-500" :
+                                  vuln.severity === 'high' ? "text-orange-500" :
+                                  "text-yellow-500"
+                                )} />
+                                <span className="text-xs font-mono font-bold text-white">{vuln.title}</span>
+                              </div>
+                              <span className={cn(
+                                "text-[10px] font-mono px-2 py-0.5 rounded border uppercase",
+                                vuln.severity === 'critical' ? "text-red-400 bg-red-400/10 border-red-400/20" : 
+                                vuln.severity === 'high' ? "text-orange-400 bg-orange-400/10 border-orange-400/20" :
+                                "text-yellow-400 bg-yellow-400/10 border-yellow-400/20"
+                              )}>
+                                {vuln.severity}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-400 font-mono leading-relaxed">{vuln.description}</p>
+                            {vuln.remediation && (
+                              <div className="p-3 bg-cyber-green/5 border border-cyber-green/10 rounded-lg">
+                                <div className="text-[10px] font-mono text-cyber-green uppercase mb-1">Remediation</div>
+                                <div className="text-[11px] text-gray-300 font-mono">{vuln.remediation}</div>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="py-12 text-center text-gray-600 font-mono text-xs uppercase tracking-widest italic bg-black/20 border border-cyber-border rounded-xl">
+                          <CheckCircle2 size={32} className="mx-auto mb-4 text-cyber-green opacity-20" />
+                          No immediate threats detected in initial scan
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'tech' && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3 text-blue-400">
+                        <Cpu size={18} />
+                        <span className="text-xs font-mono uppercase tracking-widest">Technology Stack Discovery</span>
+                      </div>
+                      {techLoading && (
+                        <div className="flex items-center gap-2 text-xs font-mono text-gray-500">
+                          <Loader2 size={14} className="animate-spin" />
+                          DETECTING...
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {techLoading && techResults.length === 0 ? (
+                        <div className="col-span-full py-12 text-center">
+                          <div className="flex flex-col items-center gap-3 text-gray-600">
+                            <Loader2 className="animate-spin" size={24} />
+                            <span className="text-xs font-mono uppercase tracking-widest">Analyzing HTTP fingerprints...</span>
+                          </div>
+                        </div>
+                      ) : techResults.length > 0 ? (
+                        techResults.map((t, i) => (
+                          <div key={i} className="bg-black/20 border border-cyber-border p-5 rounded-xl flex items-center justify-between group hover:border-blue-500/30 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className="p-3 bg-blue-500/10 rounded-lg text-blue-400">
+                                <Server size={20} />
+                              </div>
+                              <div>
+                                <div className="text-sm font-bold text-white">{t.name}</div>
+                                <div className="text-[10px] font-mono text-gray-500 uppercase tracking-widest">{t.category}</div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] font-mono text-gray-500 uppercase mb-1">Confidence</div>
+                              <div className="text-xs font-mono text-cyber-green">{t.confidence}%</div>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-full py-12 text-center text-gray-600 font-mono text-xs uppercase tracking-widest italic bg-black/20 border border-cyber-border rounded-xl">
+                          No specific technologies detected for this target
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
