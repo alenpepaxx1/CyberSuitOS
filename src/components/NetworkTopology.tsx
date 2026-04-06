@@ -198,6 +198,21 @@ export default function NetworkTopology() {
     if (mainG.empty()) {
       mainG = svg.append('g').attr('class', 'main-group');
       
+      // Data Stream Layer (Background)
+      const streamGroup = mainG.append('g').attr('class', 'data-streams');
+      for (let i = 0; i < 15; i++) {
+        streamGroup.append('line')
+          .attr('x1', -1000)
+          .attr('y1', -1000 + i * 150)
+          .attr('x2', 1000)
+          .attr('y2', -1000 + i * 150)
+          .attr('stroke', '#06b6d4')
+          .attr('stroke-width', 0.5)
+          .attr('opacity', 0.05)
+          .attr('stroke-dasharray', '10,20')
+          .style('animation', `data-flow ${30 + Math.random() * 30}s linear infinite`);
+      }
+
       // Radar Background (Static)
       const radarGroup = mainG.append('g').attr('class', 'radar-background');
       for (let i = 1; i <= 4; i++) {
@@ -220,7 +235,7 @@ export default function NetworkTopology() {
         .attr('fill', 'url(#radar-gradient)')
         .attr('opacity', 0.4)
         .style('transform-origin', '0 0')
-        .style('animation', 'radar-rotate 4s linear infinite');
+        .style('animation', 'radar-rotate 8s linear infinite');
 
       // Add CSS for radar rotation if not present
       if (document.getElementById('radar-style') === null) {
@@ -237,6 +252,20 @@ export default function NetworkTopology() {
           @keyframes pulse-ring {
             0% { transform: scale(1); opacity: 1; }
             100% { transform: scale(1.6); opacity: 0; }
+          }
+          @keyframes data-flow {
+            from { stroke-dashoffset: 100; }
+            to { stroke-dashoffset: 0; }
+          }
+          @keyframes scan-line {
+            0% { transform: translateY(-100%); opacity: 0; }
+            50% { opacity: 0.5; }
+            100% { transform: translateY(1000%); opacity: 0; }
+          }
+          @keyframes glitch-flicker {
+            0% { opacity: 1; }
+            50% { opacity: 0.9; }
+            100% { opacity: 1; }
           }
         `;
         document.head.appendChild(style);
@@ -288,9 +317,9 @@ export default function NetworkTopology() {
           const isCompromised = source.status === 'compromised' || target.status === 'compromised';
           const pG = packetGroup.append('g');
           pG.append('circle').attr('r', isCompromised ? 3 : 2).attr('fill', isCompromised ? '#ef4444' : '#06b6d4').attr('filter', 'url(#glow)')
-            .append('animateMotion').attr('dur', `${1.5 + Math.random() * 2}s`).attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
+            .append('animateMotion').attr('dur', `${3 + Math.random() * 3}s`).attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
           pG.append('circle').attr('r', isCompromised ? 2 : 1.5).attr('fill', isCompromised ? '#ef4444' : '#06b6d4').attr('opacity', 0.5)
-            .append('animateMotion').attr('dur', `${1.5 + Math.random() * 2}s`).attr('begin', '0.1s').attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
+            .append('animateMotion').attr('dur', `${3 + Math.random() * 3}s`).attr('begin', '0.1s').attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
         }
       });
     };
@@ -308,7 +337,7 @@ export default function NetworkTopology() {
       .attr('filter', 'url(#glow)');
 
     attackLine
-      .style('animation', 'attack-dash 0.5s linear infinite');
+      .style('animation', 'attack-dash 1s linear infinite');
 
     // Nodes
     const node = nodeGroup
@@ -325,12 +354,26 @@ export default function NetworkTopology() {
         setSelectedNode(d);
       })
       .on('mouseover', function(event, d) {
-        d3.select(this).select('.node-bg').attr('fill', '#1a1a1a');
+        d3.select(this).select('.node-bg').attr('fill', '#1a1a1a').attr('stroke-width', 4);
         d3.select(this).select('.node-label').attr('fill', '#fff');
+        
+        // Add temporary scanning ring on hover
+        d3.select(this).append('circle')
+          .attr('class', 'hover-ring')
+          .attr('r', 30)
+          .attr('fill', 'none')
+          .attr('stroke', '#06b6d4')
+          .attr('stroke-width', 1)
+          .attr('opacity', 0)
+          .transition()
+          .duration(300)
+          .attr('opacity', 0.5)
+          .attr('r', 35);
       })
       .on('mouseout', function(event, d) {
-        d3.select(this).select('.node-bg').attr('fill', '#0a0a0a');
+        d3.select(this).select('.node-bg').attr('fill', '#0a0a0a').attr('stroke-width', 2);
         d3.select(this).select('.node-label').attr('fill', '#888');
+        d3.select(this).selectAll('.hover-ring').remove();
       });
 
     // Node outer ring (pulse for compromised)
@@ -341,7 +384,11 @@ export default function NetworkTopology() {
       .attr('stroke', '#ef4444')
       .attr('stroke-width', 2)
       .style('transform-origin', '0 0')
-      .style('animation', 'pulse-ring 1.5s ease-out infinite');
+      .style('animation', 'pulse-ring 2.5s ease-out infinite');
+
+    // Glitch effect for compromised nodes
+    node.filter(d => d.status === 'compromised')
+      .style('animation', 'glitch-flicker 2s ease-in-out infinite');
 
     // Node background
     node.append('circle')
@@ -527,7 +574,15 @@ export default function NetworkTopology() {
       </div>
 
       {/* Main Visualization Area */}
-      <div ref={containerRef} className="flex-1 relative overflow-hidden bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/10 via-black to-black">
+      <div 
+        ref={containerRef} 
+        className={cn(
+          "flex-1 relative overflow-hidden transition-colors duration-1000",
+          stats.compromised > 0 
+            ? "bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black" 
+            : "bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/10 via-black to-black"
+        )}
+      >
         {/* Grid Background */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#06b6d415_1px,transparent_1px),linear-gradient(to_bottom,#06b6d415_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_20%,transparent_100%)] pointer-events-none" />
         
@@ -549,12 +604,16 @@ export default function NetworkTopology() {
 
         {isScanning && (
           <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
+            <div className="absolute inset-0 bg-cyan-500/5 animate-pulse" />
             <motion.div 
               initial={{ top: '-10%' }}
               animate={{ top: '110%' }}
-              transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-              className="absolute left-0 right-0 h-32 bg-gradient-to-b from-transparent via-cyan-500/10 to-cyan-500/30 border-b-2 border-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.4)]"
+              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+              className="absolute left-0 right-0 h-1 bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.8)] z-20"
             />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-[80%] h-[80%] border border-cyan-500/20 rounded-full animate-[ping_3s_linear_infinite]" />
+            </div>
             <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-cyan-500/20 border border-cyan-500/40 rounded-full backdrop-blur-md shadow-[0_0_15px_rgba(34,211,238,0.3)]">
               <span className="text-[10px] font-mono text-cyan-400 animate-pulse uppercase tracking-widest">Active Deep Scan in Progress...</span>
             </div>
