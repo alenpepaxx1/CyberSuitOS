@@ -37,6 +37,7 @@ export default function NetworkTopology() {
   const [links, setLinks] = useState<Link[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isScanning, setIsScanning] = useState(false);
+  const [activeAttacks, setActiveAttacks] = useState<{from: string, to: string}[]>([]);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
@@ -52,22 +53,13 @@ export default function NetworkTopology() {
       const res = await fetch('/api/network');
       const data = await res.json();
       
-      // Enhance data with more properties for "advance" look
-      const enhancedNodes = data.nodes.map((n: any) => ({
-        ...n,
-        os: n.type === 'server' ? 'Linux Kernel 5.15' : 'Windows 11 Pro',
-        uptime: '14d 06h 22m',
-        traffic: Math.floor(Math.random() * 100),
-        threatLevel: n.status === 'compromised' ? 95 : n.status === 'vulnerable' ? 45 : 5
-      }));
-
-      setNodes(enhancedNodes);
+      setNodes(data.nodes);
       setLinks(data.links);
       
       setStats({
-        totalNodes: enhancedNodes.length,
-        compromised: enhancedNodes.filter((n: any) => n.status === 'compromised').length,
-        vulnerable: enhancedNodes.filter((n: any) => n.status === 'vulnerable').length,
+        totalNodes: data.nodes.length,
+        compromised: data.nodes.filter((n: any) => n.status === 'compromised').length,
+        vulnerable: data.nodes.filter((n: any) => n.status === 'vulnerable').length,
         traffic: `${(Math.random() * 500 + 100).toFixed(1)} KB/s`
       });
 
@@ -78,17 +70,86 @@ export default function NetworkTopology() {
     }
   };
 
+  const handleNodeAction = async (action: 'isolate' | 'remediate' | 'scan') => {
+    if (!selectedNode) return;
+    
+    try {
+      const res = await fetch('/api/network/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId: selectedNode.id, action })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Update local state for immediate feedback
+        if (action === 'isolate') {
+          setLinks(prev => prev.filter(l => 
+            (typeof l.source === 'string' ? l.source !== selectedNode.id : l.source.id !== selectedNode.id) && 
+            (typeof l.target === 'string' ? l.target !== selectedNode.id : l.target.id !== selectedNode.id)
+          ));
+        }
+        
+        fetchNetworkData();
+        
+        // Log to terminal
+        const event = new CustomEvent('terminal-log', { 
+          detail: { 
+            message: `[NET_TOPOLOGY] ${data.message}`, 
+            level: action === 'scan' ? 'info' : 'success' 
+          } 
+        });
+        window.dispatchEvent(event);
+      }
+    } catch (e) {
+      console.error("Action failed:", e);
+    }
+  };
+
   useEffect(() => {
     fetchNetworkData();
     const interval = setInterval(fetchNetworkData, 15000);
-    return () => clearInterval(interval);
-  }, []);
+    
+    // Attack simulation
+    const attackInterval = setInterval(() => {
+      const compromised = nodes.filter(n => n.status === 'compromised');
+      if (compromised.length > 0) {
+        const attacker = compromised[Math.floor(Math.random() * compromised.length)];
+        const neighbors = links
+          .filter(l => (typeof l.source === 'string' ? l.source === attacker.id : l.source.id === attacker.id) || 
+                       (typeof l.target === 'string' ? l.target === attacker.id : l.target.id === attacker.id))
+          .map(l => {
+            const sId = typeof l.source === 'string' ? l.source : l.source.id;
+            const tId = typeof l.target === 'string' ? l.target : l.target.id;
+            return sId === attacker.id ? tId : sId;
+          });
+          
+        if (neighbors.length > 0) {
+          const targetId = neighbors[Math.floor(Math.random() * neighbors.length)];
+          setActiveAttacks(prev => [...prev, { from: attacker.id, to: targetId as string }]);
+          setTimeout(() => {
+            setActiveAttacks(prev => prev.filter(a => a.from !== attacker.id || a.to !== targetId));
+          }, 3000);
+        }
+      }
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(attackInterval);
+    };
+  }, [nodes, links]);
 
   const handleScan = () => {
     setIsScanning(true);
+    // Simulate a deep scan that might find new vulnerabilities
     setTimeout(() => {
       setIsScanning(false);
       fetchNetworkData();
+      const event = new CustomEvent('terminal-log', { 
+        detail: { message: "[NET_TOPOLOGY] Deep network scan complete. Heuristics updated.", level: 'success' } 
+      });
+      window.dispatchEvent(event);
     }, 3000);
   };
 
@@ -246,6 +307,24 @@ export default function NetworkTopology() {
 
     animatePackets();
 
+    // Attack Lines
+    const attackLine = g.append('g')
+      .selectAll('line')
+      .data(activeAttacks)
+      .join('line')
+      .attr('stroke', '#ef4444')
+      .attr('stroke-width', 3)
+      .attr('stroke-dasharray', '5,5')
+      .attr('opacity', 0.8)
+      .attr('filter', 'url(#glow)');
+
+    attackLine.append('animate')
+      .attr('attributeName', 'stroke-dashoffset')
+      .attr('from', '0')
+      .attr('to', '20')
+      .attr('dur', '0.5s')
+      .attr('repeatCount', 'indefinite');
+
     // Nodes
     const node = g.append('g')
       .selectAll('g')
@@ -297,7 +376,7 @@ export default function NetworkTopology() {
     // Node background
     node.append('circle')
       .attr('class', 'node-bg')
-      .attr('r', 22)
+      .attr('r', 24)
       .attr('fill', '#0a0a0a')
       .attr('stroke', d => {
         if (d.status === 'secure') return '#10b981';
@@ -306,32 +385,27 @@ export default function NetworkTopology() {
       })
       .attr('stroke-width', 2)
       .attr('filter', 'url(#glow)')
-      .style('transition', 'fill 0.3s ease');
+      .style('transition', 'all 0.3s ease');
 
-    // Node Icons (using simple shapes to represent icons)
-    node.each(function(d) {
-      const g = d3.select(this);
-      if (d.type === 'server') {
-        g.append('rect').attr('x', -8).attr('y', -10).attr('width', 16).attr('height', 20).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('line').attr('x1', -4).attr('y1', -4).attr('x2', 4).attr('y2', -4).attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('line').attr('x1', -4).attr('y1', 2).attr('x2', 4).attr('y2', 2).attr('stroke', '#fff').attr('stroke-width', 1);
-      } else if (d.type === 'router' || d.type === 'firewall') {
-        g.append('circle').attr('r', 10).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('line').attr('x1', -6).attr('y1', 0).attr('x2', 6).attr('y2', 0).attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('line').attr('x1', 0).attr('y1', -6).attr('x2', 0).attr('y2', 6).attr('stroke', '#fff').attr('stroke-width', 1);
-      } else if (d.type === 'cloud') {
-        g.append('path').attr('d', 'M-10,2 Q-12,-8 -2,-8 Q0,-12 8,-8 Q12,-8 10,2 Z').attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-      } else if (d.type === 'database') {
-        g.append('ellipse').attr('cx', 0).attr('cy', -6).attr('rx', 8).attr('ry', 4).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('path').attr('d', 'M-8,-6 L-8,6 Q0,10 8,6 L8,-6').attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-      } else if (d.type === 'iot') {
-        g.append('circle').attr('r', 6).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('circle').attr('r', 10).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 0.5).attr('stroke-dasharray', '2,2');
-      } else {
-        g.append('rect').attr('x', -10).attr('y', -6).attr('width', 20).attr('height', 12).attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1);
-        g.append('line').attr('x1', -12).attr('y1', 8).attr('x2', 12).attr('y2', 8).attr('stroke', '#fff').attr('stroke-width', 1);
-      }
-    });
+    // Node Icons using foreignObject for React/Lucide integration
+    node.append('foreignObject')
+      .attr('x', -12)
+      .attr('y', -12)
+      .attr('width', 24)
+      .attr('height', 24)
+      .style('pointer-events', 'none')
+      .html(d => {
+        const color = d.status === 'secure' ? '#10b981' : d.status === 'vulnerable' ? '#f59e0b' : '#ef4444';
+        let icon = '';
+        if (d.type === 'server') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`;
+        else if (d.type === 'router') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`; // Simplified
+        else if (d.type === 'firewall') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>`;
+        else if (d.type === 'database') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>`;
+        else if (d.type === 'cloud') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19x.5.5 0 0 1 .5-.5c2.2 0 4-1.8 4-4 0-2.1-1.6-3.8-3.6-4a7.5 7.5 0 0 0-14.4 2C2.8 12.9 2 14.4 2 16c0 2.2 1.8 4 4 4h11.5z"/></svg>`;
+        else if (d.type === 'iot') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12s2.545-5 7-5c4.454 0 7 5 7 5s-2.546 5-7 5c-4.455 0-7-5-7-5z"/><circle cx="12" cy="12" r="3"/></svg>`;
+        else icon = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="4" rx="2" ry="2"/><line x1="2" x2="22" y1="20" y2="20"/></svg>`;
+        return `<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">${icon}</div>`;
+      });
 
     // Node labels
     node.append('text')
@@ -364,6 +438,24 @@ export default function NetworkTopology() {
 
       node
         .attr('transform', d => `translate(${d.x},${d.y})`);
+        
+      attackLine
+        .attr('x1', d => {
+          const source = nodes.find(n => n.id === d.from);
+          return source?.x || 0;
+        })
+        .attr('y1', d => {
+          const source = nodes.find(n => n.id === d.from);
+          return source?.y || 0;
+        })
+        .attr('x2', d => {
+          const target = nodes.find(n => n.id === d.to);
+          return target?.x || 0;
+        })
+        .attr('y2', d => {
+          const target = nodes.find(n => n.id === d.to);
+          return target?.y || 0;
+        });
         
       // Packets are animated via SVG animateMotion, which automatically follows the path 'd' attribute.
     });
@@ -399,7 +491,7 @@ export default function NetworkTopology() {
       simulation.stop();
       window.removeEventListener('resize', handleResize);
     };
-  }, [nodes, zoomLevel]);
+  }, [nodes, zoomLevel, activeAttacks]);
 
   return (
     <div className={cn(
@@ -693,13 +785,19 @@ export default function NetworkTopology() {
 
                 {/* Actions */}
                 <div className="grid grid-cols-2 gap-3">
-                  <button className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-mono text-white transition-all group">
+                  <button 
+                    onClick={() => handleNodeAction('isolate')}
+                    className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-mono text-white transition-all group"
+                  >
                     <Lock size={12} className="text-gray-500 group-hover:text-white" />
                     ISOLATE
                   </button>
-                  <button className="flex items-center justify-center gap-2 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl text-[10px] font-mono text-cyan-400 transition-all">
-                    <Zap size={12} />
-                    DIAGNOSE
+                  <button 
+                    onClick={() => handleNodeAction(selectedNode.status === 'secure' ? 'scan' : 'remediate')}
+                    className="flex items-center justify-center gap-2 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl text-[10px] font-mono text-cyan-400 transition-all"
+                  >
+                    {selectedNode.status === 'secure' ? <Search size={12} /> : <Zap size={12} />}
+                    {selectedNode.status === 'secure' ? 'DEEP SCAN' : 'REMEDIATE'}
                   </button>
                 </div>
               </div>
