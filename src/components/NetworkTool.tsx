@@ -271,26 +271,56 @@ export default function NetworkTool() {
     logToTerminal(`Initiating Advanced OSINT lookup for: ${query}`, 'info');
 
     try {
-      // 1. Basic IP Geolocation
-      const geoRes = await fetch(`https://ipapi.co/${query}/json/`);
-      const geoData = await geoRes.json();
+      const targetHost = query.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
       
-      if (geoData.error) throw new Error(geoData.reason || 'Geo lookup failed');
-      
-      const geoResult = {
-        query: geoData.ip,
-        country: geoData.country_name,
-        city: geoData.city,
-        isp: geoData.org,
-        org: geoData.asn,
-        as: geoData.asn,
-        lat: geoData.latitude,
-        lon: geoData.longitude,
-        timezone: geoData.timezone,
-        currency: geoData.currency_name,
-        languages: geoData.languages,
-        date: new Date().toISOString()
-      };
+      // 1. Basic IP Geolocation (Skip for local addresses)
+      let geoResult: any;
+      if (targetHost === 'localhost' || targetHost === '127.0.0.1' || targetHost.includes('192.168.') || targetHost.includes('10.')) {
+        geoResult = {
+          query: targetHost === 'localhost' ? '127.0.0.1' : targetHost,
+          country: 'Local Network',
+          city: 'Internal',
+          isp: 'Private Infrastructure',
+          org: 'Localhost',
+          as: 'N/A',
+          lat: 0,
+          lon: 0,
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          date: new Date().toISOString()
+        };
+      } else {
+        try {
+          const geoRes = await fetch(`https://ipapi.co/${targetHost}/json/`);
+          const geoData = await geoRes.json();
+          
+          if (geoData.error) throw new Error(geoData.reason || 'Geo lookup failed');
+          
+          geoResult = {
+            query: geoData.ip,
+            country: geoData.country_name,
+            city: geoData.city,
+            isp: geoData.org,
+            org: geoData.asn,
+            as: geoData.asn,
+            lat: geoData.latitude,
+            lon: geoData.longitude,
+            timezone: geoData.timezone,
+            currency: geoData.currency_name,
+            languages: geoData.languages,
+            date: new Date().toISOString()
+          };
+        } catch (geoErr) {
+          logToTerminal(`Geo lookup failed, using basic info: ${geoErr}`, 'warn');
+          geoResult = {
+            query: targetHost,
+            country: 'Unknown',
+            city: 'Unknown',
+            isp: 'Unknown',
+            org: 'Unknown',
+            date: new Date().toISOString()
+          };
+        }
+      }
 
       // 2. Advanced Backend Scan (DNS, Headers, SSL)
       const scanRes = await fetch(`/api/scan?target=${query}`);
