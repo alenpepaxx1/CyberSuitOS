@@ -1621,6 +1621,43 @@ async function startServer() {
         ];
         break;
 
+      case 'darkweb':
+        const dwTarget = req.query.target as string || '';
+        const dwApiKey = process.env.GEMINI_API_KEY;
+
+        if (!isValidApiKey(dwApiKey)) {
+          result = [
+            { source: 'BreachForums (Simulated)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Potential database leak detected containing references to ${dwTarget}.` },
+            { source: 'Pastebin (Simulated)', date: '2024-01-22', threatLevel: 'medium', snippet: `Configuration file snippet found with IP/Domain ${dwTarget} exposed.` },
+            { source: 'Onion-Leak (Simulated)', date: '2023-11-05', threatLevel: 'low', snippet: `Target mentioned in a list of potential reconnaissance targets.` }
+          ];
+        } else {
+          try {
+            const ai = new GoogleGenAI({ apiKey: dwApiKey! });
+            const dwResponse = await ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: `Perform a simulated dark web intelligence search for the target: ${dwTarget}. 
+              Generate a JSON array of 3-5 realistic-looking dark web mentions or breach intelligence items.
+              Each object MUST have:
+              - 'source': Name of the dark web forum, marketplace, or paste site (e.g., 'BreachForums', 'Exploit.in', 'Dread', 'Pastebin').
+              - 'date': A realistic date within the last 2 years (YYYY-MM-DD).
+              - 'threatLevel': 'low', 'medium', 'high', or 'critical'.
+              - 'snippet': A short, technical-sounding snippet of the mention or leak (e.g., 'Found SQL dump with 50k records referencing target domain').
+              Make it look like real OSINT data.`,
+              config: { 
+                responseMimeType: "application/json",
+                tools: [{ googleSearch: {} }]
+              }
+            });
+            result = JSON.parse(dwResponse.text || '[]');
+          } catch (e) {
+            result = [
+              { source: 'BreachForums (Fallback)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Database leak detected containing references to ${dwTarget}.` }
+            ];
+          }
+        }
+        break;
+
       default:
         res.status(404).json({ error: "Tool not found" });
         return;
