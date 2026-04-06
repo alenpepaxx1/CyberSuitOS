@@ -1598,34 +1598,98 @@ async function startServer() {
         break;
 
       case 'fuzzer':
-        const endpoints = ['/admin', '/login', '/api', '/config', '/.env', '/.git', '/backup', '/wp-admin', '/dashboard', '/server-status'];
-        const fuzzerResults: any[] = [];
-        
-        await Promise.all(endpoints.map(async (path) => {
-          try {
-            const protocol = target.startsWith('https') ? https : http;
-            const url = target.startsWith('http') ? `${target}${path}` : `http://${target}${path}`;
-            const start = Date.now();
-            const response: any = await new Promise((resolve, reject) => {
-              const req = protocol.get(url, resolve);
-              req.on('error', reject);
-              req.setTimeout(2000, () => { req.destroy(); reject(new Error('Timeout')); });
-            });
-            const duration = Date.now() - start;
-            
-            fuzzerResults.push({
-              path,
-              status: response.statusCode,
-              length: response.headers['content-length'] || 'unknown',
-              time: `${duration}ms`,
-              type: response.headers['content-type'] || 'unknown',
-              finding: response.statusCode === 200 ? 'Potential Sensitive Path' : 'None'
-            });
-          } catch (e) {
-            // Skip failed probes
+        try {
+          const fuzzerTarget = req.query.target as string || '';
+          const fuzzerApiKey = process.env.GEMINI_API_KEY;
+          let fuzzerPayloads: any[] = [];
+
+          if (isValidApiKey(fuzzerApiKey)) {
+            try {
+              const ai = new GoogleGenAI({ apiKey: fuzzerApiKey! });
+              const fuzzResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `Generate 10 advanced fuzzing payloads for the target: ${fuzzerTarget}.
+                The payloads should target various vulnerabilities like SQLi, XSS, Path Traversal, and Command Injection.
+                Return a JSON array of objects, each with:
+                - 'payload': The actual malformed string to inject.
+                - 'type': The vulnerability type (e.g., 'SQLi', 'XSS', 'Path Traversal').
+                - 'description': What this payload is testing.`,
+                config: { responseMimeType: "application/json" }
+              });
+              const generated = JSON.parse(fuzzResponse.text || '[]');
+              fuzzerPayloads = generated.map((p: any) => p.payload);
+            } catch (e) {
+              console.error("[Scanner] AI Payload generation failed, using defaults", e);
+              fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
+            }
+          } else {
+            fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
           }
-        }));
-        result = fuzzerResults;
+
+          const fuzzerResults: any[] = [];
+          const agent = new https.Agent({ rejectUnauthorized: false });
+
+          await Promise.all(fuzzerPayloads.slice(0, 8).map(async (payload) => {
+            try {
+              const testUrl = fuzzerTarget.includes('?') 
+                ? `${fuzzerTarget}${payload}` 
+                : `${fuzzerTarget}?input=${encodeURIComponent(payload)}`;
+              
+              const finalUrl = testUrl.startsWith('http') ? testUrl : `http://${testUrl}`;
+              const start = Date.now();
+              
+              const response = await axios.get(finalUrl, {
+                httpsAgent: agent,
+                timeout: 5000,
+                validateStatus: () => true // Accept all status codes
+              });
+              
+              const duration = Date.now() - start;
+              const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+              
+              let anomalyType = 'None';
+              let riskLevel = 'low';
+              
+              if (response.status === 500) {
+                anomalyType = 'Server Error (Potential Crash)';
+                riskLevel = 'high';
+              } else if (duration > 3000) {
+                anomalyType = 'Time Delay (Potential Blind Injection)';
+                riskLevel = 'medium';
+              } else if (responseText.includes('sql syntax') || responseText.includes('mysql_fetch_array')) {
+                anomalyType = 'Database Error (SQLi Leak)';
+                riskLevel = 'critical';
+              } else if (responseText.includes('root:x:0:0')) {
+                anomalyType = 'File Disclosure (LFI)';
+                riskLevel = 'critical';
+              } else if (responseText.includes('<script>alert(1)</script>')) {
+                anomalyType = 'Reflected Content (XSS)';
+                riskLevel = 'high';
+              }
+
+              fuzzerResults.push({
+                payload,
+                response_code: response.status,
+                response_time: `${duration}ms`,
+                anomaly_type: anomalyType,
+                risk_level: riskLevel
+              });
+            } catch (e: any) {
+              fuzzerResults.push({
+                payload,
+                response_code: 'ERR',
+                response_time: 'N/A',
+                anomaly_type: 'Connection Refused',
+                risk_level: 'low'
+              });
+            }
+          }));
+
+          result = fuzzerResults;
+        } catch (e: any) {
+          console.error("[Scanner] Fuzzer failed:", e);
+          result = [{ payload: 'Error', response_code: 500, response_time: '0ms', anomaly_type: e.message, risk_level: 'low' }];
+        }
         break;
 
       case 'whois':
