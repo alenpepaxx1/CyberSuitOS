@@ -1,531 +1,251 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 /* COPYRIGHT ALEN PEPA */
-import React, { useState, useEffect } from 'react';
-import { cn } from '@/src/lib/utils';
-import { 
-  Shield, 
-  ShieldCheck,
-  Lock, 
-  Hash, 
-  Globe, 
-  Terminal as TerminalIcon, 
-  Settings, 
-  LayoutDashboard,
-  Menu,
-  ChevronRight,
-  Mail,
-  Target,
-  Cpu,
-  Activity,
-  Zap,
-  Eye,
-  Search,
-  MessageSquare,
-  Bot,
-  Code,
-  Sun,
-  Moon
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ToolId } from './types';
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
 
-// Components
-import Dashboard from './components/Dashboard';
-import PasswordLab from './components/PasswordLab';
-import CryptoTool from './components/CryptoTool';
-import NetworkTool from './components/NetworkTool';
-import VulnerabilityScanner from './components/VulnerabilityScanner';
-import NetworkTopology from './components/NetworkTopology';
-import CyberRange from './components/CyberRange';
-import PhishingSimulator from './components/PhishingSimulator';
-import PayloadLab from './components/PayloadLab';
-import StegoTool from './components/StegoTool';
-import AnonymousChat from './components/AnonymousChat';
-import PythonLab from './components/PythonLab';
-import SystemConfig from './components/SystemConfig';
-import SecurityAnalyst from './components/SecurityAnalyst';
-import AIAnalyst from './components/AIAnalyst';
-import DorkExplorer from './components/DorkExplorer';
-import Launcher from './components/Launcher';
-import Terminal, { logToTerminal } from './components/Terminal';
-import CustomCursor from './components/CustomCursor';
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --color-cyber-green: #00ff41;
+  --color-cyber-bg: #050505;
+  --color-cyber-card: #0a0a0a;
+  --color-cyber-border: rgba(255, 255, 255, 0.05);
+  --color-cyber-text: #d1d5db;
+  --color-cyber-header: #ffffff;
 
-// Contexts & Error Handling
-import { SystemProvider, useSystem } from './contexts/SystemContext';
-import { ErrorBoundary } from './components/ErrorBoundary';
-
-type Theme = 'default' | 'matrix' | 'cobalt' | 'crimson';
-
-function MainContent() {
-  const { 
-    activeTool, 
-    setActiveTool, 
-    setToolTarget, 
-    stats,
-    theme,
-    setTheme,
-    showScanlines,
-    showGrid,
-    userName,
-    clearanceLevel,
-    user,
-    isAuthReady,
-    login,
-    logout
-  } = useSystem();
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isAnalystOpen, setIsAnalystOpen] = useState(false);
-  const [booting, setBooting] = useState(true);
-  const [isScanning, setIsScanning] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showForceStart, setShowForceStart] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (booting || !isAuthReady) {
-        setShowForceStart(true);
-      }
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [booting, isAuthReady]);
-
-  const handleForceStart = () => {
-    setBooting(false);
-    // We can't directly set isAuthReady in SystemContext from here, 
-    // but we can bypass the check in this component.
-    // However, the check is (booting || !isAuthReady).
-    // So if we set booting to false, it still needs isAuthReady to be true.
-    // Let's add a local bypass state.
-  };
-
-  const [bypassLoading, setBypassLoading] = useState(false);
-  const [isLauncherOpen, setIsLauncherOpen] = useState(false);
-
-  const handleNavigate = (toolId: string, target?: string) => {
-    setActiveTool(toolId);
-    if (target) {
-      setToolTarget(target);
-    } else {
-      setToolTarget('');
-    }
-  };
-
-  const triggerScan = () => {
-    setIsScanning(true);
-    logToTerminal('SYSTEM SCAN INITIATED: Analyzing all modules...', 'info');
-    setTimeout(() => {
-      setIsScanning(false);
-      logToTerminal('SCAN COMPLETE: No threats detected. System optimized.', 'success');
-    }, 3000);
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault();
-        setIsLauncherOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-  useEffect(() => {
-    const handleNavigateEvent = (e: any) => {
-      if (e.detail?.toolId) {
-        handleNavigate(e.detail.toolId, e.detail.target);
-      }
-    };
-    window.addEventListener('navigate-tool', handleNavigateEvent);
-    return () => window.removeEventListener('navigate-tool', handleNavigateEvent);
-  }, [setActiveTool, setToolTarget]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setBooting(false), 2500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const tools = [
-    { id: 'dashboard', name: 'Dashboard', icon: LayoutDashboard, color: 'text-emerald-500' },
-    { id: 'scanner', name: 'Vulnerability Scanner', icon: Search, color: 'text-red-500' },
-    { id: 'topology', name: 'Network Topology', icon: Globe, color: 'text-blue-500' },
-    { id: 'cyber-range', name: 'Cyber Range', icon: Target, color: 'text-amber-500' },
-    { id: 'payloads', name: 'Payload Lab', icon: TerminalIcon, color: 'text-red-500' },
-    { id: 'phishing', name: 'Phishing Lab', icon: Mail, color: 'text-purple-500' },
-    { id: 'passwords', name: 'Password Lab', icon: Lock, color: 'text-cyan-500' },
-    { id: 'crypto', name: 'Crypto Engine', icon: Hash, color: 'text-indigo-500' },
-    { id: 'stego', name: 'Stego Analysis', icon: Eye, color: 'text-pink-500' },
-    { id: 'python-lab', name: 'Python Lab', icon: Code, color: 'text-yellow-500' },
-    { id: 'dorks', name: 'Dork Explorer', icon: Search, color: 'text-orange-500' },
-    { id: 'network', name: 'Network OSINT', icon: Globe, color: 'text-orange-500' },
-    { id: 'analyst', name: 'Security Analyst', icon: Bot, color: 'text-emerald-500' },
-    { id: 'anonymous-chat', name: 'Secure Chat', icon: MessageSquare, color: 'text-cyan-500' },
-    { id: 'settings', name: 'System Config', icon: Settings, color: 'text-gray-500' },
-  ];
-
-  const renderTool = () => {
-    switch (activeTool) {
-      case 'dashboard': return <Dashboard onNavigate={handleNavigate} />;
-      case 'scanner': return <VulnerabilityScanner />;
-      case 'topology': return <NetworkTopology />;
-      case 'cyber-range': return <CyberRange />;
-      case 'payloads': return <PayloadLab />;
-      case 'phishing': return <PhishingSimulator />;
-      case 'passwords': return <PasswordLab />;
-      case 'crypto': return <CryptoTool />;
-      case 'stego': return <StegoTool />;
-      case 'python-lab': return <PythonLab />;
-      case 'dorks': return <DorkExplorer />;
-      case 'network': return <NetworkTool />;
-      case 'analyst': return <SecurityAnalyst />;
-      case 'anonymous-chat': return <AnonymousChat />;
-      case 'settings': return <SystemConfig />;
-      default: return <Dashboard onNavigate={handleNavigate} />;
-    }
-  };
-
-  if ((booting || !isAuthReady) && !bypassLoading) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center font-mono relative overflow-hidden">
-        <div className="cyber-grid opacity-20" />
-        <div className="scanline" />
-        
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="relative z-10 flex flex-col items-center gap-8"
-        >
-          <div className="relative">
-            <motion.div 
-              animate={{ rotate: 360 }}
-              transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
-              className="w-24 h-24 border-2 border-emerald-500/20 rounded-full border-t-emerald-500"
-            />
-            <Shield className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-emerald-500 w-10 h-10" />
-          </div>
-          
-          <div className="space-y-2 text-center">
-            <h1 className="text-2xl font-bold text-white tracking-[0.3em] uppercase">CyberSuite OS</h1>
-            <div className="flex items-center gap-2 text-emerald-500/60 text-[10px] uppercase tracking-widest">
-              <span className="animate-pulse">{booting ? "Initializing Kernel" : "Authenticating"}</span>
-              <span className="w-12 h-[1px] bg-emerald-500/20" />
-              <span>v4.2.0-stable</span>
-            </div>
-          </div>
-
-          <div className="w-64 h-1 bg-white/5 rounded-full overflow-hidden">
-            <motion.div 
-              initial={{ width: 0 }}
-              animate={{ width: "100%" }}
-              transition={{ duration: 2, ease: "easeInOut" }}
-              className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
-            />
-          </div>
-
-          {showForceStart && (
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              onClick={() => setBypassLoading(true)}
-              className="mt-4 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-500 uppercase tracking-widest hover:bg-emerald-500/20 transition-all"
-            >
-              Force System Start
-            </motion.button>
-          )}
-        </motion.div>
-      </div>
-    );
+  @keyframes glitch {
+    0% { transform: translate(0); }
+    20% { transform: translate(-2px, 2px); }
+    40% { transform: translate(-2px, -2px); }
+    60% { transform: translate(2px, 2px); }
+    80% { transform: translate(2px, -2px); }
+    100% { transform: translate(0); }
   }
 
-  return (
-    <div className={cn(
-      "min-h-screen bg-cyber-bg text-cyber-text font-sans selection:bg-emerald-500/30 selection:text-emerald-500 flex cursor-none transition-colors duration-500",
-      theme === 'matrix' && 'matrix-theme',
-      theme === 'cobalt' && 'cobalt-theme',
-      theme === 'crimson' && 'crimson-theme',
-      theme === 'light' && 'light-theme'
-    )}>
-      <CustomCursor />
-      {showGrid && <div className="cyber-grid" />}
-      {showScanlines && <div className="scanline" />}
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
 
-      {/* Sidebar */}
-      <motion.aside 
-        initial={false}
-        animate={{ width: isSidebarOpen ? 280 : 80 }}
-        className="relative z-30 border-r border-white/5 bg-cyber-card flex flex-col transition-all duration-300"
-      >
-        <div className="p-6 flex items-center justify-between border-b border-white/5">
-          <AnimatePresence mode="wait">
-            {isSidebarOpen ? (
-              <motion.div 
-                key="logo-full"
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="flex items-center gap-3"
-              >
-                <div className="p-2 bg-emerald-500/10 rounded-lg">
-                  <Shield className="w-6 h-6 text-emerald-500" />
-                </div>
-                <span className="font-mono font-bold text-cyber-header tracking-tighter text-lg">CYBERSUITE</span>
-              </motion.div>
-            ) : (
-              <motion.div 
-                key="logo-small"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                className="mx-auto p-2 bg-emerald-500/10 rounded-lg"
-              >
-                <Shield className="w-6 h-6 text-emerald-500" />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-          {tools.map((tool) => (
-            <button
-              key={tool.id}
-              onClick={() => handleNavigate(tool.id)}
-              className={cn(
-                "w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 group relative",
-                activeTool === tool.id 
-                  ? "bg-white/5 text-cyber-header shadow-[inset_0_0_20px_rgba(255,255,255,0.02)]" 
-                  : "text-cyber-text/60 hover:bg-white/[0.02] hover:text-cyber-text"
-              )}
-            >
-              <tool.icon className={cn("w-5 h-5 shrink-0", activeTool === tool.id ? tool.color : "group-hover:text-cyber-text")} />
-              {isSidebarOpen && (
-                <span className="text-sm font-medium tracking-wide">{tool.name}</span>
-              )}
-              {activeTool === tool.id && (
-                <motion.div 
-                  layoutId="active-pill"
-                  className="absolute left-0 w-1 h-6 bg-emerald-500 rounded-r-full"
-                />
-              )}
-            </button>
-          ))}
-        </nav>
-
-        <div className="p-4 border-t border-white/5 space-y-2">
-          <button 
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="w-full flex items-center gap-4 p-3 rounded-xl text-cyber-text/60 hover:bg-white/[0.02] transition-all"
-          >
-            <Menu className="w-5 h-5 shrink-0" />
-            {isSidebarOpen && <span className="text-sm">Collapse Sidebar</span>}
-          </button>
-          <button className="w-full flex items-center gap-4 p-3 rounded-xl text-cyber-text/60 hover:bg-white/[0.02] transition-all">
-            <Settings className="w-5 h-5 shrink-0" />
-            {isSidebarOpen && <span className="text-sm">System Config</span>}
-          </button>
-        </div>
-      </motion.aside>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col relative z-10 overflow-hidden">
-        {/* Header */}
-        <header className="h-16 border-b border-white/5 bg-cyber-card/20 backdrop-blur-md flex items-center justify-between px-8">
-          <div className="flex items-center gap-6 flex-1">
-            <div className="relative max-w-md w-full group">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-emerald-500 transition-colors" />
-              <input 
-                type="text" 
-                placeholder="Search tools, threats, or documentation... (Ctrl+K)"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white/5 border border-white/5 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-emerald-500/50 transition-all"
-              />
-              
-              <AnimatePresence>
-                {searchQuery && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute top-full left-0 right-0 mt-2 bg-cyber-card border border-white/10 rounded-xl shadow-2xl overflow-hidden z-50"
-                  >
-                    <div className="p-2 max-h-[300px] overflow-y-auto">
-                      {tools.filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase())).length > 0 ? (
-                        tools
-                          .filter(t => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
-                          .map(tool => (
-                            <button
-                              key={tool.id}
-                              onClick={() => {
-                                handleNavigate(tool.id);
-                                setSearchQuery('');
-                              }}
-                              className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-white/5 transition-colors text-left group"
-                            >
-                              <div className={cn("p-2 rounded-lg bg-black/40", tool.color)}>
-                                <tool.icon size={16} />
-                              </div>
-                              <div>
-                                <div className="text-sm font-bold text-cyber-header group-hover:text-emerald-400 transition-colors">{tool.name}</div>
-                                <div className="text-[10px] font-mono text-gray-500 uppercase">System Tool • /{tool.id}</div>
-                              </div>
-                            </button>
-                          ))
-                      ) : (
-                        <div className="p-4 text-center text-gray-500 font-mono text-xs uppercase tracking-widest">
-                          No tools matching "{searchQuery}"
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 rounded-full border border-emerald-500/20">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] font-mono font-bold text-emerald-500 uppercase tracking-widest">System Secure</span>
-            </div>
-            
-            <div className="w-[1px] h-4 bg-white/10 mx-2" />
-            
-            <button 
-              onClick={() => setTheme(theme === 'light' ? 'default' : 'light')}
-              className="p-2 text-gray-500 hover:text-white transition-colors"
-              title={theme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
-            >
-              {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-            </button>
-
-            <button 
-              onClick={() => setIsAnalystOpen(true)}
-              className="p-2 text-gray-500 hover:text-white transition-colors relative"
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#050505]" />
-            </button>
-            
-            <div className="flex items-center gap-3 pl-4 border-l border-white/10">
-              <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-cyber-header">{userName}</div>
-                <div className="text-[10px] text-emerald-500/60 font-mono">Level {clearanceLevel} Clearance</div>
-              </div>
-              {user ? (
-                <button 
-                  onClick={logout}
-                  className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold shadow-lg shadow-emerald-500/20 hover:scale-105 transition-transform"
-                >
-                  {userName.substring(0, 2).toUpperCase()}
-                </button>
-              ) : (
-                <button 
-                  onClick={login}
-                  className="px-4 py-2 rounded-lg bg-emerald-500 text-black font-bold text-xs uppercase tracking-widest hover:bg-emerald-400 transition-colors"
-                >
-                  Login
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
-
-        {/* Tool Viewport */}
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeTool}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              transition={{ duration: 0.3 }}
-              className="h-full"
-            >
-              {renderTool()}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-
-        {/* Footer Stats */}
-        <footer className="h-10 border-t border-white/5 bg-cyber-card/40 backdrop-blur-md flex items-center justify-between px-6 text-[10px] font-mono uppercase tracking-widest text-cyber-text/60">
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Cpu className="w-3 h-3 text-emerald-500" />
-              <span>CPU: <span className="text-cyber-header">{stats?.cpu || '0'}%</span></span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="w-3 h-3 text-blue-500" />
-              <span>RAM: <span className="text-cyber-header">{stats?.ram || '0'}%</span></span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Zap className="w-3 h-3 text-amber-500" />
-              <span>LATENCY: <span className="text-cyber-header">24ms</span></span>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-6">
-            <div className="flex items-center gap-2">
-              <Globe className="w-3 h-3 text-emerald-500" />
-              <span>NODE: <span className="text-cyber-header">{stats?.hostname || 'LOCAL_HOST'}</span></span>
-            </div>
-            <button 
-              onClick={() => window.dispatchEvent(new CustomEvent('terminal-open'))}
-              className="flex items-center gap-2 hover:text-emerald-500 transition-colors"
-            >
-              <TerminalIcon className="w-3 h-3" />
-              <span>SHELL: <span className="text-cyber-header">ZSH</span></span>
-            </button>
-            <div className="text-emerald-500/40">
-              {new Date().toLocaleTimeString()}
-            </div>
-          </div>
-        </footer>
-      </main>
-
-      {/* Permanent Copyright Footer */}
-      <div 
-        data-copyright="alen-pepa"
-        className="fixed bottom-0 left-0 w-full h-1 bg-cyber-green/10 z-[9999] pointer-events-none" 
-      />
-      <div 
-        data-copyright="alen-pepa"
-        className="fixed bottom-2 left-1/2 -translate-x-1/2 z-[9999] pointer-events-none select-none opacity-40 hover:opacity-100 transition-opacity duration-500"
-      >
-        <span className="text-[8px] font-mono text-cyber-green uppercase tracking-[0.5em] whitespace-nowrap">
-          © {new Date().getFullYear()} ALEN PEPA • CYBERSUITE OS • ALL RIGHTS RESERVED
-        </span>
-      </div>
-
-      {/* AI Analyst Overlay */}
-      <AIAnalyst isOpen={isAnalystOpen} onClose={() => setIsAnalystOpen(false)} />
-      
-      {/* Quick Launcher */}
-      <Launcher 
-        isOpen={isLauncherOpen} 
-        onClose={() => setIsLauncherOpen(false)} 
-        onSelect={(id) => {
-          handleNavigate(id);
-          setIsLauncherOpen(false);
-        }}
-        activeTool={activeTool as ToolId}
-      />
-
-      {/* Terminal Overlay */}
-      <Terminal />
-    </div>
-  );
+  --animate-spin-slow: spin-slow 8s linear infinite;
+  --animate-scanline: scanline 10s linear infinite;
 }
 
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <SystemProvider>
-        <MainContent />
-      </SystemProvider>
-    </ErrorBoundary>
-  );
+/* Permanent Copyright Protection */
+[data-copyright="alen-pepa"] {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 0.4 !important;
+  pointer-events: none !important;
+  user-select: none !important;
+  z-index: 9999 !important;
 }
+
+.glitch-text {
+  position: relative;
+  display: inline-block;
+  color: #ff4d4d;
+  animation: glitch 2s cubic-bezier(.25,.46,.45,.94) both infinite;
+  text-shadow: 0.05em 0 0 rgba(255,0,0,.3),
+              -0.025em -0.05em 0 rgba(150,0,0,.3),
+              0 0 5px rgba(255,0,0,0.2);
+}
+
+.glitch-text:hover {
+  animation: glitch 0.3s cubic-bezier(.25,.46,.45,.94) both infinite;
+  text-shadow: 0.05em 0 0 rgba(255,0,0,.9),
+              -0.025em -0.05em 0 rgba(150,0,0,.9),
+              0.025em 0.05em 0 rgba(255,80,80,.9),
+              0 0 10px rgba(255,0,0,0.5);
+}
+
+.matrix-theme {
+  --color-cyber-green: #00ff41;
+  --color-cyber-bg: #000500;
+  --color-cyber-card: #001100;
+  --color-cyber-border: #003b00;
+}
+
+.cobalt-theme {
+  --color-cyber-green: #00d4ff;
+  --color-cyber-bg: #000814;
+  --color-cyber-card: #001d3d;
+  --color-cyber-border: #003566;
+}
+
+.crimson-theme {
+  --color-cyber-green: #ff4d4d;
+  --color-cyber-bg: #1a0000;
+  --color-cyber-card: #2d0000;
+  --color-cyber-border: #4d0000;
+}
+
+.light-theme {
+  --color-cyber-green: #059669;
+  --color-cyber-bg: #f8fafc;
+  --color-cyber-card: #ffffff;
+  --color-cyber-border: #e2e8f0;
+  --color-cyber-text: #1e293b;
+  --color-cyber-header: #0f172a;
+}
+
+@layer base {
+  body {
+    @apply bg-cyber-bg text-cyber-text font-sans antialiased cursor-none;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-cyber-header font-mono tracking-tight;
+  }
+
+  /* Custom Scrollbar - CyberSuite Edition */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #050505;
+    border-left: 1px solid #1a1a1a;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1a1a1a;
+    border: 1px solid #333;
+    border-radius: 2px;
+    transition: all 0.2s ease;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #222;
+    border-color: var(--color-cyber-green);
+    box-shadow: inset 0 0 5px rgba(0, 255, 65, 0.2);
+  }
+
+  ::-webkit-scrollbar-button:single-button {
+    background-color: #0a0a0a;
+    display: block;
+    background-size: 6px;
+    background-repeat: no-repeat;
+    border: 1px solid #1a1a1a;
+  }
+
+  ::-webkit-scrollbar-button:single-button:vertical:decrement {
+    height: 12px;
+    width: 10px;
+    background-position: center center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%2300ff41'><polygon points='5,2 1,8 9,8'/></svg>");
+  }
+
+  ::-webkit-scrollbar-button:single-button:vertical:increment {
+    height: 12px;
+    width: 10px;
+    background-position: center center;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10' fill='%2300ff41'><polygon points='1,2 9,2 5,8'/></svg>");
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: #050505;
+  }
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.1);
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 65, 0.5);
+  box-shadow: 0 0 10px rgba(0, 255, 65, 0.3);
+}
+
+.cyber-grid {
+  background-image: 
+    linear-gradient(rgba(0, 255, 65, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.scanline {
+  width: 100%;
+  height: 100px;
+  z-index: 10;
+  background: linear-gradient(0deg, rgba(0, 255, 65, 0) 0%, rgba(0, 255, 65, 0.02) 50%, rgba(0, 255, 65, 0) 100%);
+  opacity: 0.1;
+  position: absolute;
+  bottom: 100%;
+  animation: scanline 10s linear infinite;
+}
+
+@keyframes scanline {
+  0% { bottom: 100%; }
+  100% { bottom: -100px; }
+}
+
+.cyber-card {
+  @apply bg-[#0d0d0d] border border-white/5 relative overflow-hidden transition-all duration-500;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(0, 255, 65, 0.05) 0%, transparent 70%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02) 0%, transparent 100%);
+  box-shadow: 0 4px 24px -1px rgba(0, 0, 0, 0.5);
+}
+
+.cyber-card::before {
+  content: '';
+  @apply absolute inset-0 opacity-0 transition-opacity duration-500 pointer-events-none;
+  background: linear-gradient(45deg, transparent, rgba(0, 255, 65, 0.03), transparent);
+}
+
+.cyber-card:hover::before {
+  @apply opacity-100;
+}
+
+.cyber-card:hover {
+  @apply border-cyber-green/30 shadow-[0_0_30px_rgba(0,255,65,0.08)];
+  transform: translateY(-2px);
+}
+
+.glass-panel {
+  @apply bg-black/40 backdrop-blur-md border border-white/10 shadow-2xl;
+}
+
+.text-glow-green {
+  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+}
+
+.text-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.corner-accent {
+  @apply absolute w-2 h-2 border-cyber-green/30 pointer-events-none;
+}
+
+.corner-tl { @apply top-0 left-0 border-t border-l; }
+.corner-tr { @apply top-0 right-0 border-t border-r; }
+.corner-bl { @apply bottom-0 left-0 border-b border-l; }
+.corner-br { @apply bottom-0 right-0 border-b border-r; }
+
+.cyber-button {
+  @apply relative px-4 py-2 bg-black/40 border border-white/10 text-[10px] font-mono text-gray-400 uppercase tracking-widest transition-all hover:bg-cyber-green/10 hover:border-cyber-green/30 hover:text-white;
+}
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
