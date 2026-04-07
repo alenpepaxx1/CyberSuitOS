@@ -145,8 +145,10 @@ class VulnerabilityScanner {
           }
         });
       }
-    } catch (e) {
-      console.warn("[Scanner] crt.sh lookup failed:", e);
+    } catch (e: any) {
+      if (e.response?.status !== 404) {
+        console.warn("[Scanner] crt.sh lookup failed:", e.message || e);
+      }
     }
 
     // 2. Passive Enumeration (HackerTarget - Free API)
@@ -161,8 +163,8 @@ class VulnerabilityScanner {
           }
         });
       }
-    } catch (e) {
-      console.warn("[Scanner] HackerTarget lookup failed:", e);
+    } catch (e: any) {
+      console.warn("[Scanner] HackerTarget lookup failed:", e.message || e);
     }
 
     // 3. Common Subdomains Brute-force (Expanded)
@@ -372,8 +374,8 @@ class VulnerabilityScanner {
           securityRisk: "Low (WHOIS Data)"
         };
       }
-    } catch (e) {
-      console.error("[Scanner] WHOIS lookup failed:", e);
+    } catch (e: any) {
+      console.error("[Scanner] WHOIS lookup failed:", e.message || e);
     }
 
     return { status: "Lookup failed" };
@@ -618,7 +620,7 @@ async function startServer() {
         return res.json({ text: "Simulated AI Analysis (Fallback): The local analysis engine has processed your request due to an API key error. The system appears stable, but further manual review is recommended." });
       }
       
-      console.error("AI Generation Error:", error);
+      console.error("AI Generation Error:", error.message || error);
       res.status(500).json({ error: errorMessage });
     }
   });
@@ -675,7 +677,7 @@ async function startServer() {
       if (errorMessage.includes("API key not valid") || errorMessage.includes("400")) {
         console.warn("Threat Intel: AI Core offline (Invalid API Key). Using fallback data.");
       } else {
-        console.error("Failed to fetch threat intelligence:", error);
+        console.error("Failed to fetch threat intelligence:", error.message || error);
       }
       // Return fallback data instead of 500 error
       res.json(fallbackThreatIntel);
@@ -999,8 +1001,8 @@ async function startServer() {
             securityRisk: "Low (IP Resource)"
           };
         }
-      } catch (e) {
-        console.warn(`[Scanner] IP RDAP fetch failed for ${hostname}:`, e);
+      } catch (e: any) {
+        console.warn(`[Scanner] IP RDAP fetch failed for ${hostname}:`, e.message || e);
       }
     }
 
@@ -1052,8 +1054,8 @@ async function startServer() {
               rdapData = response.data;
               break;
             }
-          } catch (e) {
-            console.warn(`[Scanner] RDAP fetch failed for ${finalDomain}:`, e);
+          } catch (e: any) {
+            console.warn(`[Scanner] RDAP fetch failed for ${finalDomain}:`, e.message || e);
           }
         }
         domainParts.shift(); // Remove the first part (e.g., 'www')
@@ -1150,8 +1152,8 @@ async function startServer() {
         }
       } catch (e) {}
       return null;
-    } catch (e) {
-      console.error("[Scanner] WHOIS/RDAP lookup error:", e);
+    } catch (e: any) {
+      console.error("[Scanner] WHOIS/RDAP lookup error:", e.message || e);
       return null;
     }
   }
@@ -1275,8 +1277,8 @@ async function startServer() {
       results.summary = `Scan completed for ${target}. Found ${vulnerabilities.length} potential security issues.`;
       results.recommendations = vulnerabilities.map(v => v.remediation).slice(0, 5);
 
-    } catch (error) {
-      console.error("[Scanner] Global scan error:", error);
+    } catch (error: any) {
+      console.error("[Scanner] Global scan error:", error.message || error);
       results.error = "Scan failed";
     }
 
