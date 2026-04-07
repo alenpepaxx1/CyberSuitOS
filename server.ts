@@ -18,6 +18,336 @@ const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const TECH_SIGNATURES = {
+  headers: {
+    'server': [
+      { name: 'Apache', pattern: /apache/i },
+      { name: 'Nginx', pattern: /nginx/i },
+      { name: 'Microsoft-IIS', pattern: /microsoft-iis/i },
+      { name: 'LiteSpeed', pattern: /litespeed/i },
+      { name: 'Cloudflare', pattern: /cloudflare/i }
+    ],
+    'x-powered-by': [
+      { name: 'PHP', pattern: /php/i },
+      { name: 'Express', pattern: /express/i },
+      { name: 'ASP.NET', pattern: /asp\.net/i },
+      { name: 'Next.js', pattern: /next\.js/i }
+    ],
+    'via': [
+      { name: 'Varnish', pattern: /varnish/i },
+      { name: 'Squid', pattern: /squid/i }
+    ]
+  },
+  body: [
+    { name: 'React', pattern: /react/i },
+    { name: 'Vue.js', pattern: /vue/i },
+    { name: 'Angular', pattern: /angular/i },
+    { name: 'jQuery', pattern: /jquery/i },
+    { name: 'WordPress', pattern: /wp-content|wp-includes/i },
+    { name: 'Drupal', pattern: /drupal/i },
+    { name: 'Joomla', pattern: /joomla/i },
+    { name: 'Bootstrap', pattern: /bootstrap/i },
+    { name: 'Tailwind CSS', pattern: /tailwind/i }
+  ]
+};
+
+class VulnerabilityScanner {
+  static async dnsLookup(hostname: string) {
+    const results: any = { a: [], mx: [], txt: [], ns: [] };
+    try {
+      const lookup = await dns.promises.lookup(hostname);
+      results.a = [lookup.address];
+      try { results.mx = await dns.promises.resolveMx(hostname); } catch (e) {}
+      try { results.txt = await dns.promises.resolveTxt(hostname); } catch (e) {}
+      try { results.ns = await dns.promises.resolveNs(hostname); } catch (e) {}
+    } catch (e) {
+      results.error = "DNS resolution failed";
+    }
+    return results;
+  }
+
+  static async portScan(hostname: string, ports: number[] = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5432, 8080, 8443, 27017]) {
+    const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
+    const limit = pLimit(10);
+    const results: any[] = [];
+
+    await Promise.all(ports.map(port => limit(() => {
+      return new Promise((resolve) => {
+        const socket = new net.Socket();
+        socket.setTimeout(2000);
+        socket.on('connect', () => {
+          results.push({ port, status: 'open', service: VulnerabilityScanner.getServiceName(port) });
+          socket.destroy();
+          resolve(null);
+        });
+        socket.on('timeout', () => { socket.destroy(); resolve(null); });
+        socket.on('error', () => { socket.destroy(); resolve(null); });
+        socket.connect(port, scanHost);
+      });
+    })));
+
+    return results.sort((a, b) => a.port - b.port);
+  }
+
+  static getServiceName(port: number) {
+    const services: any = {
+      21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
+      80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB',
+      3306: 'MySQL', 3389: 'RDP', 5432: 'PostgreSQL', 8080: 'HTTP-Proxy',
+      8443: 'HTTPS-Alt', 27017: 'MongoDB'
+    };
+    return services[port] || 'Unknown';
+  }
+
+  static async subdomainEnum(hostname: string) {
+    if (net.isIP(hostname) || hostname === 'localhost') return [];
+    
+    const searchDomain = hostname.replace(/^www\./, '');
+    const commonSubs = [
+      'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
+      'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
+      'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
+      'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
+      'ftp', 'smtp', 'pop', 'imap', 'webmail', 'autodiscover', 'cpanel', 'whm', 'webdisk',
+      'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage',
+      'git', 'svn', 'dev-api', 'api-dev', 'test-api', 'api-test', 'v1', 'v2', 'v3',
+      'status', 'monitor', 'monitoring', 'zabbix', 'nagios', 'grafana', 'prometheus',
+      'jenkins', 'gitlab', 'docker', 'registry', 'k8s', 'kubernetes', 'cluster',
+      'db', 'database', 'sql', 'mysql', 'postgres', 'redis', 'elastic', 'mongo',
+      'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2',
+      'dev1', 'dev2', 'dev3', 'qa', 'uat', 'prod', 'production', 'sandbox', 'preprod'
+    ];
+
+    const results: any[] = [];
+    const limit = pLimit(10);
+
+    await Promise.all(commonSubs.map(sub => limit(async () => {
+      const domain = `${sub}.${searchDomain}`;
+      try {
+        const lookup = await dns.promises.lookup(domain);
+        if (lookup && lookup.address) {
+          results.push({ subdomain: domain, ip: lookup.address, status: 'up' });
+        }
+      } catch (e) {}
+    })));
+
+    return results;
+  }
+
+  static async headerAnalysis(url: string) {
+    try {
+      const response = await axios.get(url, { 
+        timeout: 5000, 
+        validateStatus: () => true,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      
+      const headers = response.headers;
+      const securityHeaders = [
+        'Content-Security-Policy',
+        'Strict-Transport-Security',
+        'X-Frame-Options',
+        'X-Content-Type-Options',
+        'Referrer-Policy',
+        'Permissions-Policy'
+      ];
+
+      const analysis: any = {
+        present: [],
+        missing: [],
+        raw: headers
+      };
+
+      securityHeaders.forEach(header => {
+        if (headers[header.toLowerCase()]) {
+          analysis.present.push(header);
+        } else {
+          analysis.missing.push(header);
+        }
+      });
+
+      return analysis;
+    } catch (e) {
+      return { error: "Failed to fetch headers" };
+    }
+  }
+
+  static async sslInspection(url: string) {
+    if (!url.startsWith('https')) return { status: 'No SSL (HTTP)' };
+
+    return new Promise((resolve) => {
+      const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+        const cert = (res.socket as any).getPeerCertificate();
+        if (cert && Object.keys(cert).length > 0) {
+          const validTo = new Date(cert.valid_to);
+          resolve({
+            subject: cert.subject,
+            issuer: cert.issuer,
+            valid_from: cert.valid_from,
+            valid_to: cert.valid_to,
+            status: validTo > new Date() ? "Valid" : "Expired"
+          });
+        } else {
+          resolve({ status: "No certificate found" });
+        }
+      });
+      req.on('error', () => resolve({ status: "SSL Handshake failed" }));
+      req.setTimeout(5000, () => { req.destroy(); resolve({ status: "Timeout" }); });
+    });
+  }
+
+  static async whoisLookup(hostname: string) {
+    const os = await import('os');
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const networkInterfaces = os.networkInterfaces();
+      const localIps = Object.values(networkInterfaces)
+        .flat()
+        .filter((details: any) => details.family === 'IPv4' && !details.internal)
+        .map((details: any) => details.address);
+
+      return {
+        domain: hostname,
+        registrar: "Internal/Local Network",
+        registrant: "System Administrator",
+        creationDate: "N/A",
+        expiryDate: "N/A",
+        updatedDate: "N/A",
+        nameServers: ["Localhost"],
+        status: ["active"],
+        raw: "Local/Internal address - WHOIS not applicable.",
+        details: {
+          hostname: os.hostname(),
+          platform: os.platform(),
+          arch: os.arch(),
+          uptime: `${Math.floor(os.uptime() / 3600)}h ${Math.floor((os.uptime() % 3600) / 60)}m`,
+          localIps: localIps
+        },
+        securityRisk: "None (Local Environment)"
+      };
+    }
+
+    // IP WHOIS support
+    if (net.isIP(hostname)) {
+      try {
+        const response = await axios.get(`https://rdap.db.ripe.net/ip/${hostname}`, {
+          headers: { 'Accept': 'application/rdap+json' },
+          timeout: 10000,
+          validateStatus: () => true
+        });
+        
+        if (response.status === 200) {
+          const data = response.data;
+          return {
+            domain: hostname,
+            registrar: data.handle || "Unknown",
+            registrant: data.name || "Unknown",
+            creationDate: data.events?.find((e: any) => e.eventAction === 'registration')?.eventDate || "N/A",
+            expiryDate: "N/A",
+            updatedDate: data.events?.find((e: any) => e.eventAction === 'last changed')?.eventDate || "N/A",
+            nameServers: [],
+            status: data.status || ["active"],
+            raw: JSON.stringify(data, null, 2),
+            securityRisk: "Low (IP RDAP Data)"
+          };
+        }
+      } catch (e) {}
+    }
+
+    // Fallback to whois-json if RDAP fails or is not supported for TLD
+    try {
+      const whoisJson = require('whois-json').default || require('whois-json');
+      const data = await whoisJson(hostname);
+      if (data && Object.keys(data).length > 0) {
+        return {
+          domain: hostname,
+          registrar: data.registrar || data.registrarName || "Unknown",
+          registrant: data.registrantName || data.registrantOrganization || "Unknown",
+          creationDate: data.creationDate || data.creationDateTimestamp || "N/A",
+          expiryDate: data.expirationDate || data.registryExpiryDate || "N/A",
+          updatedDate: data.updatedDate || data.lastUpdatedDate || "N/A",
+          nameServers: Array.isArray(data.nameServer) ? data.nameServer : (data.nameServer ? data.nameServer.split(' ') : []),
+          status: Array.isArray(data.domainStatus) ? data.domainStatus : (data.domainStatus ? data.domainStatus.split(' ') : []),
+          raw: JSON.stringify(data, null, 2),
+          securityRisk: "Low (WHOIS Data)"
+        };
+      }
+    } catch (e) {
+      console.error("[Scanner] WHOIS lookup failed:", e);
+    }
+
+    return { status: "Lookup failed" };
+  }
+
+  static async techDetection(url: string) {
+    try {
+      const response = await axios.get(url, { 
+        timeout: 5000, 
+        validateStatus: () => true,
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      });
+      
+      const headers = response.headers;
+      const body = response.data.toString();
+      const tech = new Set<string>();
+
+      // Check headers
+      Object.entries(TECH_SIGNATURES.headers).forEach(([header, signatures]) => {
+        const value = headers[header.toLowerCase()];
+        if (value) {
+          signatures.forEach(sig => {
+            if (sig.pattern.test(value)) tech.add(sig.name);
+          });
+        }
+      });
+
+      // Check body
+      TECH_SIGNATURES.body.forEach(sig => {
+        if (sig.pattern.test(body)) tech.add(sig.name);
+      });
+
+      return Array.from(tech);
+    } catch (e) {
+      return [];
+    }
+  }
+
+  static async fuzzer(url: string) {
+    const payloads = [
+      "' OR '1'='1",
+      "<script>alert(1)</script>",
+      "../../../../etc/passwd",
+      "'; DROP TABLE users; --"
+    ];
+    
+    const results: any[] = [];
+    const limit = pLimit(5);
+
+    await Promise.all(payloads.map(payload => limit(async () => {
+      try {
+        const testUrl = url.includes('?') ? `${url}&test=${encodeURIComponent(payload)}` : `${url}?test=${encodeURIComponent(payload)}`;
+        const start = Date.now();
+        const response = await axios.get(testUrl, { 
+          timeout: 5000, 
+          validateStatus: () => true,
+          httpsAgent: new https.Agent({ rejectUnauthorized: false })
+        });
+        const duration = Date.now() - start;
+        
+        results.push({
+          payload,
+          status: response.status,
+          time: `${duration}ms`,
+          risk: response.status === 500 ? 'high' : 'low'
+        });
+      } catch (e) {
+        results.push({ payload, status: 'Error', time: 'N/A', risk: 'low' });
+      }
+    })));
+
+    return results;
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -1033,1102 +1363,47 @@ async function startServer() {
     const hostname = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
 
     let result: any;
+    const url = target.startsWith('http') ? target : `http://${target}`;
+    
     switch (tool) {
       case 'subdomains':
-        if (net.isIP(hostname) || hostname === 'localhost' || hostname === '127.0.0.1') {
-          result = [{ subdomain: hostname, ip: hostname === 'localhost' ? '127.0.0.1' : hostname, status: 'up', type: 'A' }];
-          break;
-        }
-
-        let searchDomain = hostname;
-        if (searchDomain.startsWith('www.')) {
-          searchDomain = searchDomain.substring(4);
-        }
-
-        const foundSubdomains: any[] = [];
-        const uniqueSubs = new Set<string>();
-        const resolvedSubs = new Set<string>();
-
-        // 1. Common subdomains dictionary
-        const commonSubs = [
-          'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
-          'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
-          'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
-          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
-          'ftp', 'smtp', 'pop', 'imap', 'webmail', 'autodiscover', 'cpanel', 'whm', 'webdisk',
-          'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage',
-          'git', 'svn', 'dev-api', 'api-dev', 'test-api', 'api-test', 'v1', 'v2', 'v3',
-          'status', 'monitor', 'monitoring', 'zabbix', 'nagios', 'grafana', 'prometheus',
-          'jenkins', 'gitlab', 'docker', 'registry', 'k8s', 'kubernetes', 'cluster',
-          'db', 'database', 'sql', 'mysql', 'postgres', 'redis', 'elastic', 'mongo',
-          'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2',
-          'dev1', 'dev2', 'dev3', 'qa', 'uat', 'prod', 'production', 'sandbox', 'preprod',
-          'api1', 'api2', 'api3', 'web', 'web1', 'web2', 'web3', 'app1', 'app2', 'app3',
-          'mail1', 'mail2', 'mail3', 'smtp1', 'smtp2', 'smtp3', 'pop1', 'pop2', 'pop3',
-          'imap1', 'imap2', 'imap3', 'ftp1', 'ftp2', 'ftp3', 'ssh', 'vpn1', 'vpn2', 'vpn3',
-          'proxy', 'proxy1', 'proxy2', 'proxy3', 'loadbalancer', 'lb', 'gateway', 'gw',
-          'firewall', 'fw', 'router', 'switch', 'hub', 'bridge', 'dns1', 'dns2', 'dns3',
-          'ns', 'ns3', 'ns4', 'mx1', 'mx2', 'mx3', 'txt', 'spf', 'dkim', 'dmarc',
-          'devops', 'sysadmin', 'root', 'super', 'manager', 'owner', 'user', 'users',
-          'customer', 'customers', 'partner', 'partners', 'vendor', 'vendors', 'supplier',
-          'suppliers', 'employee', 'employees', 'hr', 'finance', 'accounting', 'legal',
-          'marketing', 'sales', 'support1', 'support2', 'helpdesk', 'service', 'services',
-          'api-gateway', 'gateway-api', 'microservice', 'microservices', 'service1', 'service2',
-          'node1', 'node2', 'node3', 'server1', 'server2', 'server3', 'host1', 'host2', 'host3'
-        ];
-        
-        const dictionarySubs = commonSubs.map(sub => `${sub}.${searchDomain}`);
-        dictionarySubs.push(searchDomain);
-
-        // 2. Start resolving dictionary subdomains immediately
-        const resolveBatch = async (subs: string[]) => {
-          const limit = pLimit(10); // Limit to 10 concurrent lookups
-          await Promise.all(subs.map(domain => limit(async () => {
-            if (resolvedSubs.has(domain)) return;
-            try {
-              // Add a 2s timeout for each DNS lookup to prevent hanging
-              const lookup = await Promise.race([
-                dns.promises.lookup(domain),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
-              ]) as any;
-              
-              if (lookup && lookup.address) {
-                foundSubdomains.push({ 
-                  subdomain: domain, 
-                  ip: lookup.address, 
-                  status: 'up', 
-                  type: lookup.family === 6 ? 'AAAA' : 'A',
-                  last_seen: new Date().toISOString()
-                });
-              }
-            } catch (e) {}
-            resolvedSubs.add(domain);
-          })));
-        };
-
-        // 3. Start crt.sh fetch, HackerTarget fetch, and dictionary resolution in parallel
-        console.log(`[Scanner] Starting parallel subdomain discovery for ${searchDomain}...`);
-        
-        const hackerTargetPromise = (async () => {
-          try {
-            const htUrl = `https://api.hackertarget.com/hostsearch/?q=${searchDomain}`;
-            const response = await axios.get(htUrl, { timeout: 8000 });
-            if (response.status === 200 && typeof response.data === 'string') {
-              const lines = response.data.split('\n');
-              const newSubs = new Set<string>();
-              lines.forEach(line => {
-                const parts = line.split(',');
-                if (parts[0] && parts[0].endsWith(searchDomain)) {
-                  newSubs.add(parts[0].toLowerCase());
-                }
-              });
-              if (newSubs.size > 0) {
-                console.log(`[Scanner] HackerTarget found ${newSubs.size} unique subdomains, resolving...`);
-                await resolveBatch(Array.from(newSubs));
-              }
-            }
-          } catch (e: any) {
-            console.warn(`[Scanner] HackerTarget fetch skipped/failed (${e.message}).`);
-          }
-        })();
-
-        const crtShPromise = (async () => {
-          try {
-            const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
-            const response = await axios.get(crtUrl, {
-              timeout: 10000, // Reduced to 10s to prevent long hangs
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-              },
-              validateStatus: () => true
-            });
-
-            if (response.status === 200 && response.data) {
-              const certs = response.data;
-              if (Array.isArray(certs)) {
-                const newSubs = new Set<string>();
-                certs.forEach((cert: any) => {
-                  const nameValue = cert.name_value.toLowerCase();
-                  nameValue.split('\n').forEach((sub: string) => {
-                    const cleanSub = sub.trim();
-                    if (cleanSub && !cleanSub.includes('*') && cleanSub.endsWith(searchDomain) && !resolvedSubs.has(cleanSub)) {
-                      newSubs.add(cleanSub);
-                    }
-                  });
-                });
-                
-                if (newSubs.size > 0) {
-                  console.log(`[Scanner] crt.sh found ${newSubs.size} unique subdomains, resolving...`);
-                  await resolveBatch(Array.from(newSubs));
-                }
-              }
-            }
-          } catch (e: any) {
-            // Suppress crt.sh timeout/failure warnings to reduce log noise
-          }
-        })();
-
-        // Run all discovery methods in parallel
-        await Promise.all([
-          resolveBatch(dictionarySubs),
-          hackerTargetPromise,
-          crtShPromise
-        ]);
-
-        if (foundSubdomains.length === 0) {
-          console.warn(`[Scanner] No subdomains found for ${searchDomain}. Using fallback.`);
-          foundSubdomains.push({ subdomain: searchDomain, ip: 'Unknown', status: 'down', type: 'A' });
-        } else {
-          console.log(`[Scanner] Found ${foundSubdomains.length} total subdomains for ${searchDomain}.`);
-        }
-        
-        // Sort by subdomain name
-        foundSubdomains.sort((a, b) => a.subdomain.localeCompare(b.subdomain));
-        
-        result = foundSubdomains;
+        result = await VulnerabilityScanner.subdomainEnum(hostname);
         break;
-
       case 'ports':
-        const commonPorts = [
-          21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 465, 587, 993, 995, 1433, 1521, 
-          2049, 3000, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9000, 9200, 27017
-        ];
-        const portResults: any[] = [];
-        
-        // Use 127.0.0.1 for localhost to avoid IPv6 issues
-        const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
-        
-        const limit = pLimit(20); // Limit to 20 concurrent port scans
-        await Promise.all(commonPorts.map(port => limit(() => {
-          return new Promise((resolve) => {
-            const socket = new net.Socket();
-            socket.setTimeout(1500);
-            socket.on('connect', () => {
-              console.log(`[Scanner] Port ${port} is open on ${scanHost}`);
-              
-              // Attempt banner grabbing for open ports
-              let banner = '';
-              const bannerSocket = new net.Socket();
-              bannerSocket.setTimeout(2000);
-              bannerSocket.connect(port, scanHost, () => {
-                // Some services send banner on connect (SSH, FTP)
-              });
-              
-              bannerSocket.on('data', (data) => {
-                banner = data.toString().trim().substring(0, 100);
-                bannerSocket.destroy();
-              });
-              
-              bannerSocket.on('error', () => bannerSocket.destroy());
-              bannerSocket.on('timeout', () => bannerSocket.destroy());
-              
-              // Wait a bit for banner
-              setTimeout(() => {
-                portResults.push({ 
-                  port, 
-                  service: getServiceName(port), 
-                  state: 'open', 
-                  version: banner ? 'Detected' : 'Unknown',
-                  banner: banner || '' 
-                });
-                socket.destroy();
-                bannerSocket.destroy();
-                resolve(null);
-              }, 1000);
-            });
-            socket.on('timeout', () => {
-              console.log(`[Scanner] Port ${port} timed out on ${scanHost}`);
-              portResults.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
-              socket.destroy();
-              resolve(null);
-            });
-            socket.on('error', (err) => {
-              console.log(`[Scanner] Port ${port} error on ${scanHost}:`, err.message);
-              portResults.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
-              socket.destroy();
-              resolve(null);
-            });
-            socket.connect(port, scanHost);
-          });
-        })));
-        result = portResults.sort((a, b) => a.port - b.port);
+        result = await VulnerabilityScanner.portScan(hostname);
         break;
-
       case 'headers':
-        try {
-          const url = target.startsWith('http') ? target : `http://${target}`;
-          const agent = new https.Agent({ rejectUnauthorized: false });
-          
-          const response = await axios.get(url, {
-            httpsAgent: agent,
-            timeout: 10000,
-            maxRedirects: 5,
-            validateStatus: () => true // Accept all status codes
-          });
-          
-          const headers = response.headers;
-          const analysis: any = {
-            security: {},
-            disclosure: {},
-            cookies: [],
-            score: 0,
-            totalChecks: 0,
-            passedChecks: 0
-          };
-
-          const securityHeaders = {
-            'Content-Security-Policy': { 
-              rec: 'Implement a strong CSP to prevent XSS and data injection.', 
-              severity: 'high',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                if (val.includes('unsafe-inline') || val.includes('unsafe-eval')) {
-                  return { status: 'warning', score: 5, detail: 'CSP present but allows unsafe-inline or unsafe-eval.' };
-                }
-                return { status: 'secure', score: 10, detail: '' };
-              }
-            },
-            'Strict-Transport-Security': { 
-              rec: 'Enable HSTS to force HTTPS connections.', 
-              severity: 'medium',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                if (!val.includes('max-age')) return { status: 'warning', score: 5, detail: 'HSTS present but missing max-age.' };
-                return { status: 'secure', score: 10, detail: '' };
-              }
-            },
-            'X-Frame-Options': { 
-              rec: 'Set to DENY or SAMEORIGIN to prevent clickjacking.', 
-              severity: 'medium',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                const v = val.toUpperCase();
-                if (v === 'DENY' || v === 'SAMEORIGIN') return { status: 'secure', score: 10, detail: '' };
-                return { status: 'warning', score: 5, detail: 'X-Frame-Options set to insecure value.' };
-              }
-            },
-            'X-Content-Type-Options': { 
-              rec: 'Set to nosniff to prevent MIME sniffing.', 
-              severity: 'low',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                if (val.toLowerCase() === 'nosniff') return { status: 'secure', score: 10, detail: '' };
-                return { status: 'warning', score: 5, detail: 'X-Content-Type-Options set to insecure value.' };
-              }
-            },
-            'Referrer-Policy': { 
-              rec: 'Set to strict-origin-when-cross-origin to protect user privacy.', 
-              severity: 'low',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                const secureValues = ['no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin'];
-                if (secureValues.includes(val.toLowerCase())) return { status: 'secure', score: 10, detail: '' };
-                return { status: 'warning', score: 5, detail: 'Referrer-Policy set to potentially insecure value.' };
-              }
-            },
-            'Permissions-Policy': { 
-              rec: 'Define browser feature permissions to reduce attack surface.', 
-              severity: 'low',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                return { status: 'secure', score: 10, detail: '' };
-              }
-            },
-            'X-XSS-Protection': { 
-              rec: 'Deprecated but still useful for older browsers. Set to 1; mode=block.', 
-              severity: 'info',
-              check: (val: string) => {
-                if (!val) return { status: 'missing', score: 0, detail: '' };
-                if (val.includes('1; mode=block')) return { status: 'secure', score: 10, detail: '' };
-                return { status: 'warning', score: 5, detail: 'X-XSS-Protection present but not in block mode.' };
-              }
-            }
-          };
-
-          Object.entries(securityHeaders).forEach(([h, config]) => {
-            const val = headers[h.toLowerCase()];
-            const checkResult = config.check(val);
-            analysis.totalChecks++;
-            if (checkResult.status === 'secure') analysis.passedChecks++;
-            analysis.score += checkResult.score;
-
-            analysis.security[h] = {
-              value: val || 'Missing',
-              status: checkResult.status,
-              severity: checkResult.status === 'secure' ? 'none' : (checkResult.status === 'warning' ? 'low' : config.severity),
-              recommendation: checkResult.status === 'secure' ? 'None' : config.rec,
-              detail: checkResult.detail || ''
-            };
-          });
-          
-          // Check for sensitive headers (Information Disclosure)
-          const sensitiveHeaders = ['server', 'x-powered-by', 'x-aspnet-version', 'via', 'x-cache', 'x-generator'];
-          sensitiveHeaders.forEach(h => {
-            const val = headers[h.toLowerCase()];
-            if (val) {
-              analysis.disclosure[h] = {
-                value: val,
-                status: 'vulnerable',
-                severity: 'low',
-                recommendation: `Information disclosure: Hide the '${h}' header to reduce attack surface.`
-              };
-            }
-          });
-
-          // Cookie analysis
-          const setCookies = headers['set-cookie'];
-          if (setCookies) {
-            setCookies.forEach(cookie => {
-              const parts = cookie.split(';').map(p => p.trim());
-              const name = parts[0].split('=')[0];
-              const isSecure = parts.some(p => p.toLowerCase() === 'secure');
-              const isHttpOnly = parts.some(p => p.toLowerCase() === 'httponly');
-              const sameSite = parts.find(p => p.toLowerCase().startsWith('samesite='))?.split('=')[1] || 'None';
-
-              analysis.cookies.push({
-                name,
-                secure: isSecure,
-                httpOnly: isHttpOnly,
-                sameSite,
-                status: (isSecure && isHttpOnly) ? 'secure' : 'warning',
-                recommendation: `${!isSecure ? 'Missing Secure flag. ' : ''}${!isHttpOnly ? 'Missing HttpOnly flag.' : ''}`
-              });
-            });
-          }
-
-          // Calculate final percentage score
-          analysis.overallScore = Math.round((analysis.score / (analysis.totalChecks * 10)) * 100);
-          
-          result = analysis;
-        } catch (e: any) {
-          return res.status(500).json({ error: e.message });
-        }
+        result = await VulnerabilityScanner.headerAnalysis(url);
         break;
-
       case 'dns':
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-          const os = await import('os');
-          const networkInterfaces = os.networkInterfaces();
-          const localIps = Object.values(networkInterfaces)
-            .flat()
-            .filter((details: any) => details.family === 'IPv4' && !details.internal)
-            .map((details: any) => details.address);
-
-          result = {
-            records: {
-              'A': ['127.0.0.1'],
-              'Local IPs': localIps,
-              'Hostname': [os.hostname()],
-              'Platform': [os.platform()],
-              'Status': ['Localhost detected - Standard DNS resolution skipped.']
-            },
-            security: {
-              'DNSSEC': { status: 'n/a', detail: 'Not applicable for localhost' },
-              'SPF': { status: 'n/a', detail: 'Not applicable for localhost' },
-              'DMARC': { status: 'n/a', detail: 'Not applicable for localhost' },
-              'CAA': { status: 'n/a', detail: 'Not applicable for localhost' }
-            }
-          };
-          break;
-        }
-        const dnsRecords: any = {};
-        const recordTypes: { type: keyof typeof dns.promises; label: string }[] = [
-          { type: 'resolve4', label: 'A' },
-          { type: 'resolve6', label: 'AAAA' },
-          { type: 'resolveMx', label: 'MX' },
-          { type: 'resolveNs', label: 'NS' },
-          { type: 'resolveTxt', label: 'TXT' },
-          { type: 'resolveSoa', label: 'SOA' },
-          { type: 'resolveCname', label: 'CNAME' },
-          { type: 'resolveSrv', label: 'SRV' },
-          { type: 'resolveCaa', label: 'CAA' }
-        ];
-        
-        const resolveDNS = async (host: string) => {
-          const limit = pLimit(5); // Limit to 5 concurrent DNS lookups
-          await Promise.all(recordTypes.map(async ({ type, label }) => limit(async () => {
-            try {
-              const method = dns.promises[type] as Function;
-              // Add a 3s timeout for each DNS lookup
-              const res = await Promise.race([
-                method(host),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
-              ]);
-              if (res && (Array.isArray(res) ? res.length > 0 : true)) {
-                dnsRecords[label] = res;
-              }
-            } catch (e) {
-              // Record type not found or timeout
-            }
-          })));
-        };
-
-        await resolveDNS(hostname);
-
-        // If no records found and it's a www subdomain, try the root domain
-        if (Object.keys(dnsRecords).length === 0 && hostname.startsWith('www.')) {
-          const rootDomain = hostname.substring(4);
-          await resolveDNS(rootDomain);
-        }
-
-        // Security Analysis
-        const securityAnalysis: any = {
-          'DNSSEC': { status: 'unknown', detail: 'Could not verify DNSSEC status.' },
-          'SPF': { status: 'missing', detail: 'No SPF record found. Risk of email spoofing.' },
-          'DMARC': { status: 'missing', detail: 'No DMARC record found. Risk of domain impersonation.' },
-          'CAA': { status: 'missing', detail: 'No CAA record found. Any CA can issue certificates for this domain.' }
-        };
-
-        // Analyze TXT records for SPF and DMARC
-        if (dnsRecords['TXT']) {
-          const txtRecords = dnsRecords['TXT'].flat();
-          const spf = txtRecords.find((r: string) => r.startsWith('v=spf1'));
-          if (spf) {
-            securityAnalysis['SPF'] = { 
-              status: 'secure', 
-              detail: 'SPF record detected.',
-              value: spf
-            };
-          }
-
-          // DMARC is usually on _dmarc.domain
-          try {
-            const dmarcRes = await dns.promises.resolveTxt(`_dmarc.${hostname}`);
-            const dmarc = dmarcRes.flat().find((r: string) => r.startsWith('v=DMARC1'));
-            if (dmarc) {
-              securityAnalysis['DMARC'] = { 
-                status: 'secure', 
-                detail: 'DMARC record detected.',
-                value: dmarc
-              };
-            }
-          } catch (e) {
-            // No DMARC
-          }
-        }
-
-        // Analyze CAA
-        if (dnsRecords['CAA']) {
-          securityAnalysis['CAA'] = { 
-            status: 'secure', 
-            detail: 'CAA records found, restricting certificate issuance.',
-            value: JSON.stringify(dnsRecords['CAA'])
-          };
-        }
-
-        // DNSSEC check (simplified)
-        if (dnsRecords['SOA']) {
-          securityAnalysis['DNSSEC'] = { 
-            status: 'info', 
-            detail: 'SOA record present. DNSSEC requires deeper inspection of RRSIG/DNSKEY records.' 
-          };
-        }
-
-        result = {
-          records: dnsRecords,
-          security: securityAnalysis
-        };
+        result = await VulnerabilityScanner.dnsLookup(hostname);
         break;
-
-      case 'ssl':
-        if (hostname === 'localhost' || hostname === '127.0.0.1') {
-          result = {
-            subject: { CN: 'localhost' },
-            issuer: { CN: 'Self-Signed (Local Development)' },
-            valid_from: new Date().toISOString(),
-            valid_to: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
-            fingerprint: 'LOCAL-CERT-FINGERPRINT',
-            status: "Internal/Self-Signed",
-            grade: "A",
-            vulnerabilities: ["Local development environment detected"],
-            protocol: "TLSv1.3",
-            cipher: "TLS_AES_256_GCM_SHA384",
-            hsts: { enabled: false, detail: "HSTS not recommended for local development" },
-            details: {
-              keyType: "RSA (2048 bits)",
-              serialNumber: "00:DE:AD:BE:EF",
-              sigAlg: "sha256WithRSAEncryption"
-            }
-          };
-          break;
-        }
-        try {
-          const options = {
-            host: hostname,
-            port: 443,
-            method: 'GET',
-            rejectUnauthorized: false,
-          };
-          
-          result = await new Promise((resolve, reject) => {
-            const req = https.request(options, (httpsRes) => {
-              const cert = (httpsRes.socket as any).getPeerCertificate(true);
-              const cipher = (httpsRes.socket as any).getCipher ? (httpsRes.socket as any).getCipher() : null;
-              const protocol = (httpsRes.socket as any).getProtocol ? (httpsRes.socket as any).getProtocol() : 'Unknown';
-              const hstsHeader = httpsRes.headers['strict-transport-security'];
-
-              if (cert && Object.keys(cert).length > 0) {
-                const validTo = new Date(cert.valid_to);
-                const isValid = validTo > new Date();
-                const vulnerabilities: string[] = [];
-                let grade = "A";
-
-                if (!isValid) {
-                  vulnerabilities.push("Certificate is expired");
-                  grade = "F";
-                }
-                
-                if (cert.sigalg && (cert.sigalg.includes('md5') || cert.sigalg.includes('sha1'))) {
-                  vulnerabilities.push(`Weak signature algorithm: ${cert.sigalg}`);
-                  grade = grade === "F" ? "F" : "C";
-                }
-
-                if (protocol === 'TLSv1' || protocol === 'TLSv1.1' || protocol === 'SSLv3' || protocol === 'SSLv2') {
-                  vulnerabilities.push(`Insecure protocol version: ${protocol}`);
-                  grade = "F";
-                }
-
-                if (cipher && (cipher.bits < 128)) {
-                  vulnerabilities.push(`Weak cipher strength: ${cipher.name} (${cipher.bits} bits)`);
-                  grade = grade === "F" ? "F" : "C";
-                }
-
-                const sslData = {
-                  subject: cert.subject,
-                  issuer: cert.issuer,
-                  valid_from: cert.valid_from,
-                  valid_to: cert.valid_to,
-                  fingerprint: cert.fingerprint,
-                  status: grade === "F" ? "Expired/Invalid" : (grade === "C" ? "Weak" : "Valid"),
-                  grade: grade,
-                  vulnerabilities: vulnerabilities,
-                  cipher: cipher ? `${cipher.name} (${cipher.bits} bits)` : 'Unknown',
-                  protocol: protocol,
-                  hsts: {
-                    enabled: !!hstsHeader,
-                    detail: hstsHeader ? `HSTS enabled: ${hstsHeader}` : "HSTS not enabled. Risk of protocol downgrade attacks."
-                  },
-                  details: {
-                    keyType: cert.pubkey ? `${cert.pubkey.type || 'Unknown'} (${cert.bits || 'Unknown'} bits)` : 'Unknown',
-                    serialNumber: cert.serialNumber,
-                    sigAlg: cert.sigalg,
-                    asn1Curve: cert.asn1Curve,
-                    nistCurve: cert.nistCurve
-                  }
-                };
-                
-                httpsRes.destroy();
-                resolve(sslData);
-              } else {
-                httpsRes.destroy();
-                reject(new Error("No certificate found"));
-              }
-            });
-            
-            req.on('error', reject);
-            req.setTimeout(5000, () => { req.destroy(); reject(new Error("Timeout")); });
-            req.end();
-          });
-        } catch (e: any) {
-          return res.status(500).json({ error: `SSL analysis failed: ${e.message}` });
-        }
-        break;
-
-      case 'fuzzer':
-        try {
-          const fuzzerTarget = req.query.target as string || '';
-          const fuzzerApiKey = process.env.GEMINI_API_KEY;
-          let fuzzerPayloads: any[] = [];
-
-          if (isValidApiKey(fuzzerApiKey)) {
-            try {
-              const ai = new GoogleGenAI({ apiKey: fuzzerApiKey! });
-              const fuzzResponse = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: `Generate 10 advanced fuzzing payloads for the target: ${fuzzerTarget}.
-                The payloads should target various vulnerabilities like SQLi, XSS, Path Traversal, and Command Injection.
-                Return a JSON array of objects, each with:
-                - 'payload': The actual malformed string to inject.
-                - 'type': The vulnerability type (e.g., 'SQLi', 'XSS', 'Path Traversal').
-                - 'description': What this payload is testing.`,
-                config: { responseMimeType: "application/json" }
-              });
-              const generated = JSON.parse(fuzzResponse.text || '[]');
-              fuzzerPayloads = generated.map((p: any) => p.payload);
-            } catch (e) {
-              console.error("[Scanner] AI Payload generation failed, using defaults", e);
-              fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
-            }
-          } else {
-            fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
-          }
-
-          const fuzzerResults: any[] = [];
-          const agent = new https.Agent({ rejectUnauthorized: false });
-
-          await Promise.all(fuzzerPayloads.slice(0, 8).map(async (payload) => {
-            try {
-              const testUrl = fuzzerTarget.includes('?') 
-                ? `${fuzzerTarget}${payload}` 
-                : `${fuzzerTarget}?input=${encodeURIComponent(payload)}`;
-              
-              const finalUrl = testUrl.startsWith('http') ? testUrl : `http://${testUrl}`;
-              const start = Date.now();
-              
-              const response = await axios.get(finalUrl, {
-                httpsAgent: agent,
-                timeout: 5000,
-                validateStatus: () => true // Accept all status codes
-              });
-              
-              const duration = Date.now() - start;
-              const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
-              
-              let anomalyType = 'None';
-              let riskLevel = 'low';
-              
-              if (response.status === 500) {
-                anomalyType = 'Server Error (Potential Crash)';
-                riskLevel = 'high';
-              } else if (duration > 3000) {
-                anomalyType = 'Time Delay (Potential Blind Injection)';
-                riskLevel = 'medium';
-              } else if (responseText.includes('sql syntax') || responseText.includes('mysql_fetch_array')) {
-                anomalyType = 'Database Error (SQLi Leak)';
-                riskLevel = 'critical';
-              } else if (responseText.includes('root:x:0:0')) {
-                anomalyType = 'File Disclosure (LFI)';
-                riskLevel = 'critical';
-              } else if (responseText.includes('<script>alert(1)</script>')) {
-                anomalyType = 'Reflected Content (XSS)';
-                riskLevel = 'high';
-              }
-
-              fuzzerResults.push({
-                payload,
-                response_code: response.status,
-                response_time: `${duration}ms`,
-                anomaly_type: anomalyType,
-                risk_level: riskLevel
-              });
-            } catch (e: any) {
-              fuzzerResults.push({
-                payload,
-                response_code: 'ERR',
-                response_time: 'N/A',
-                anomaly_type: 'Connection Refused',
-                risk_level: 'low'
-              });
-            }
-          }));
-
-          result = fuzzerResults;
-        } catch (e: any) {
-          console.error("[Scanner] Fuzzer failed:", e);
-          result = [{ payload: 'Error', response_code: 500, response_time: '0ms', anomaly_type: e.message, risk_level: 'low' }];
-        }
-        break;
-
       case 'whois':
-        try {
-          const whoisData = await performWhoisLookup(hostname);
-          if (whoisData) {
-            result = whoisData;
-          } else {
-            // Provide a graceful fallback if WHOIS completely fails
-            result = {
-              domain: hostname,
-              registrar: "Unknown",
-              registrant: "Unknown",
-              creationDate: "Unknown",
-              expiryDate: "Unknown",
-              updatedDate: "Unknown",
-              nameServers: [],
-              status: ["Unknown"],
-              raw: "WHOIS data could not be retrieved for this domain or IP."
-            };
-          }
-        } catch (e) {
-          return res.status(500).json({ error: "WHOIS lookup failed." });
-        }
+        result = await VulnerabilityScanner.whoisLookup(hostname);
         break;
-
-      case 'bruteforce':
-        const service = (req.query.service as string || 'ssh').toLowerCase();
-        const attempts = Math.floor(Math.random() * 100) + 50;
-        const success = Math.random() < 0.05; // 5% chance of success
-        
-        const logs = [
-          `[${new Date().toISOString()}] Starting brute force attack on ${service} at ${hostname}...`,
-          `[${new Date().toISOString()}] Using dictionary: ${Math.random() > 0.5 ? 'top_1000_passwords.txt' : 'rockyou.txt'}`,
-        ];
-        
-        for (let i = 0; i < 5; i++) {
-          logs.push(`[${new Date().toISOString()}] Attempting: admin / ${Math.random().toString(36).substring(7)}... FAILED`);
-        }
-        
-        if (success) {
-          logs.push(`[${new Date().toISOString()}] SUCCESS: Valid credentials found! admin / password123`);
-        } else {
-          logs.push(`[${new Date().toISOString()}] Brute force complete. No valid credentials found for ${service}.`);
-        }
-
-        const bruteResults = {
-          service,
-          attempts,
-          success,
-          logs,
-          summary: `Brute force attack on ${service} at ${hostname} completed. ${attempts} attempts made. ${success ? 'SUCCESS: Valid credentials found.' : 'No success.'}`
-        };
-        result = bruteResults;
+      case 'ssl':
+        result = await VulnerabilityScanner.sslInspection(url);
         break;
-
-      case 'netmap':
-        const numNodes = Math.floor(Math.random() * 20) + 15;
-        const nodes = [
-          { id: 'target', label: hostname, type: 'target', ip: '10.0.0.5', val: 20 },
-          { id: 'gateway', label: 'Gateway', type: 'infrastructure', ip: '192.168.1.1', val: 15 },
-          { id: 'fw', label: 'Firewall', type: 'security', ip: '192.168.1.254', val: 15 },
-          { id: 'lb', label: 'Load Balancer', type: 'infrastructure', ip: '10.0.0.1', val: 15 }
-        ];
-        
-        const links = [
-          { source: 'gateway', target: 'fw' },
-          { source: 'fw', target: 'lb' },
-          { source: 'lb', target: 'target' }
-        ];
-
-        const types = ['service', 'database', 'cache', 'worker', 'storage', 'auth'];
-        
-        for (let i = 0; i < numNodes; i++) {
-          const id = `node_${i}`;
-          const type = types[Math.floor(Math.random() * types.length)];
-          nodes.push({
-            id,
-            label: `${type}-${i}`,
-            type: type,
-            ip: `10.0.${Math.floor(Math.random() * 5)}.${Math.floor(Math.random() * 255)}`,
-            val: Math.floor(Math.random() * 5) + 5
-          });
-          
-          // Connect to target or load balancer mostly
-          if (Math.random() > 0.3) {
-            links.push({ source: 'target', target: id });
-          } else if (Math.random() > 0.5) {
-            links.push({ source: 'lb', target: id });
-          } else {
-            // Connect to a random existing node
-            const randomNode = nodes[Math.floor(Math.random() * (nodes.length - 1))];
-            links.push({ source: randomNode.id, target: id });
-          }
-        }
-
-        result = {
-          target: hostname,
-          nodes,
-          links,
-          summary: `Network topology discovery for ${hostname} complete. ${nodes.length} nodes and ${links.length} connections identified.`
-        };
-        break;
-
-      case 'vulndb':
-        const vulnQuery = (req.query.target as string || '').toLowerCase();
-        const vulns = [
-          { id: 'CVE-2021-44228', title: 'Log4Shell', severity: 'critical', description: 'Apache Log4j2 remote code execution vulnerability.' },
-          { id: 'CVE-2021-34473', title: 'ProxyShell', severity: 'critical', description: 'Microsoft Exchange Server remote code execution vulnerability.' },
-          { id: 'CVE-2022-22965', title: 'Spring4Shell', severity: 'critical', description: 'Spring Framework remote code execution vulnerability.' },
-          { id: 'CVE-2023-23397', title: 'Outlook Elevation of Privilege', severity: 'critical', description: 'Microsoft Outlook elevation of privilege vulnerability.' },
-          { id: 'CVE-2024-21887', title: 'Ivanti Connect Secure RCE', severity: 'critical', description: 'Ivanti Connect Secure and Policy Secure remote code execution vulnerability.' }
-        ].filter(v => v.title.toLowerCase().includes(vulnQuery) || v.id.toLowerCase().includes(vulnQuery) || v.description.toLowerCase().includes(vulnQuery));
-        
-        result = vulns.length > 0 ? vulns : [{ id: 'N/A', title: 'No results found', severity: 'info', description: `No vulnerabilities found matching "${vulnQuery}" in the local database.` }];
-        break;
-
-      case 'nmap':
-        try {
-          const nmapType = req.query.type as string || 'quick';
-          const nmapApiKey = process.env.GEMINI_API_KEY;
-          
-          let portsToScan = [80, 443, 22, 21, 25, 53, 445, 3306, 3389, 5432, 8080, 8443, 3000];
-          if (nmapType === 'full') {
-            portsToScan = [...new Set([...portsToScan, 23, 110, 143, 993, 995, 1723, 3306, 5900, 6379, 27017])];
-          }
-
-          const nmapResults: any[] = [];
-          const limit = pLimit(10); // Limit concurrency
-
-          await Promise.all(portsToScan.map(port => limit(async () => {
-            return new Promise((resolve) => {
-              const socket = new net.Socket();
-              const start = Date.now();
-              socket.setTimeout(1000);
-              
-              socket.on('connect', () => {
-                const duration = Date.now() - start;
-                nmapResults.push({ 
-                  port, 
-                  service: getServiceName(port), 
-                  state: "open",
-                  time: `${duration}ms`
-                });
-                socket.destroy();
-                resolve(null);
-              });
-              
-              socket.on('timeout', () => { socket.destroy(); resolve(null); });
-              socket.on('error', () => { socket.destroy(); resolve(null); });
-              socket.connect(port, hostname);
-            });
-          })));
-
-          let aiIntelligence: any = null;
-          if (isValidApiKey(nmapApiKey) && nmapResults.length > 0) {
-            try {
-              const ai = new GoogleGenAI({ apiKey: nmapApiKey! });
-              const nmapPrompt = `Perform an advanced Nmap-style analysis for the target: ${hostname}.
-              Detected open ports: ${nmapResults.map(r => r.port).join(', ')}.
-              Scan type: ${nmapType}.
-              
-              Generate a JSON object with:
-              - 'os_info': A detailed OS guess (e.g., 'Linux 5.10.0-kali (Debian)', 'Windows Server 2022').
-              - 'host_status': A status string with latency (e.g., 'Host is up (0.002s latency)').
-              - 'port_details': An array of objects for each open port:
-                - 'port': The port number.
-                - 'version': A realistic service version (e.g., 'nginx 1.18.0', 'OpenSSH 8.2p1').
-                - 'script_output': A simulated NSE script output (e.g., 'http-title: Welcome to Nginx', 'ssh-hostkey: 2048 ...').
-              - 'summary': A technical summary of the scan findings.`;
-
-              const aiResponse = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: nmapPrompt,
-                config: { responseMimeType: "application/json" }
-              });
-              aiIntelligence = JSON.parse(aiResponse.text || '{}');
-            } catch (e) {
-              console.error("[Scanner] Nmap AI analysis failed:", e);
-            }
-          }
-
-          result = {
-            host_status: aiIntelligence?.host_status || "Host is up (0.045s latency)",
-            os_info: aiIntelligence?.os_info || (nmapType === 'os' ? "Linux 5.4.0-104-generic (Ubuntu)" : "Unknown"),
-            open_ports: nmapResults.map(r => {
-              const details = aiIntelligence?.port_details?.find((d: any) => d.port === r.port);
-              return {
-                ...r,
-                version: details?.version || `${r.service}/1.0 (Simulated)`,
-                script_output: details?.script_output || `Detected ${r.service} service on port ${r.port}`
-              };
-            }),
-            summary: aiIntelligence?.summary || `Nmap scan report for ${hostname}. Host is up. ${nmapResults.length} ports open. Scan completed in ${(Math.random() * 2 + 1).toFixed(2)} seconds.`
-          };
-        } catch (e: any) {
-          console.error("[Scanner] Nmap failed:", e);
-          result = { error: "Nmap scan failed", details: e.message };
-        }
-        break;
-
       case 'tech':
-        try {
-          const url = target.startsWith('http') ? target : `http://${target}`;
-          const agent = new https.Agent({ rejectUnauthorized: false });
-          
-          const response = await axios.get(url, {
-            httpsAgent: agent,
-            timeout: 10000,
-            maxRedirects: 5,
-            validateStatus: (status) => status >= 200 && status < 500 // Accept 2xx, 3xx, 4xx
-          });
-          
-          if (response.status >= 400) {
-            result = [{ name: 'Target Unreachable', category: 'Error', confidence: 0, error: `Status ${response.status}` }];
-            break;
-          }
-          
-          const tech: any[] = [];
-          const headers = response.headers;
-          const html = (typeof response.data === 'string' ? response.data : '').toLowerCase();
-          
-          const server = (headers['server'] || '').toLowerCase();
-          const xPoweredBy = (headers['x-powered-by'] || '').toLowerCase();
-          const cookies = headers['set-cookie'] || [];
-          const cookieStr = (Array.isArray(cookies) ? cookies.join(' ') : String(cookies)).toLowerCase();
-          
-          const addTech = (name: string, category: string, confidence: number, version?: string, security?: string[]) => {
-            tech.push({ name, category, confidence, version, security });
-          };
-
-          // Web Servers
-          if (server.includes('apache')) {
-            const version = server.match(/apache\/([\d\.]+)/)?.[1];
-            addTech('Apache', 'Web Server', 95, version, ["Ensure version is up-to-date to avoid known CVEs.", "Disable server signature in production."]);
-          }
-          if (server.includes('nginx')) {
-            const version = server.match(/nginx\/([\d\.]+)/)?.[1];
-            addTech('Nginx', 'Web Server', 95, version, ["Check for misconfigured proxy settings.", "Hide version number in headers."]);
-          }
-          if (server.includes('iis') || server.includes('microsoft-iis')) {
-            const version = server.match(/iis\/([\d\.]+)/)?.[1];
-            addTech('IIS', 'Web Server', 95, version, ["Check for insecure authentication methods.", "Ensure latest security patches are applied."]);
-          }
-          if (server.includes('litespeed')) addTech('LiteSpeed', 'Web Server', 95);
-          
-          // CDNs / WAFs
-          if (server.includes('cloudflare')) addTech('Cloudflare', 'CDN/WAF', 100, undefined, ["WAF protection active.", "Check for 'Cloudflare bypass' vulnerabilities via origin IP leaks."]);
-          if (server.includes('akamai')) addTech('Akamai', 'CDN', 95);
-          if (server.includes('sucuri')) addTech('Sucuri', 'WAF', 95);
-          if (headers['x-fastly-request-id']) addTech('Fastly', 'CDN', 100);
-          
-          // Backend Languages & Frameworks
-          if (xPoweredBy.includes('php') || cookieStr.includes('phpsessid') || html.includes('.php?')) {
-            const version = xPoweredBy.match(/php\/([\d\.]+)/)?.[1];
-            addTech('PHP', 'Backend Language', 90, version, ["Check for insecure file uploads.", "Ensure 'display_errors' is off in production."]);
-          }
-          if (xPoweredBy.includes('express')) addTech('Express.js', 'Backend Framework', 90, undefined, ["Ensure 'helmet' is used for security headers.", "Check for prototype pollution risks."]);
-          if (xPoweredBy.includes('asp.net') || cookieStr.includes('aspsessionid')) addTech('ASP.NET', 'Backend Framework', 90);
-          if (cookieStr.includes('jsessionid')) addTech('Java', 'Backend Language', 90);
-          
-          // Frontend Frameworks
-          if (xPoweredBy.includes('next.js') || html.includes('/_next/') || html.includes('__next')) addTech('Next.js', 'Frontend Framework', 90, undefined, ["Check for SSR/SSG data leaks.", "Ensure API routes are properly authenticated."]);
-          if (xPoweredBy.includes('nuxt') || html.includes('/_nuxt/') || html.includes('__nuxt')) addTech('Nuxt.js', 'Frontend Framework', 90);
-          if (html.includes('data-reactroot') || html.includes('react-dom')) addTech('React', 'Frontend Library', 80);
-          if (html.includes('data-v-') || html.includes('vue.js')) addTech('Vue.js', 'Frontend Framework', 80);
-          if (html.includes('ng-version') || html.includes('ng-app')) {
-            const version = html.match(/ng-version="([\d\.]+)"/)?.[1];
-            addTech('Angular', 'Frontend Framework', 80, version);
-          }
-          if (html.includes('svelte-')) addTech('Svelte', 'Frontend Framework', 80);
-          
-          // CMS
-          if (html.includes('wp-content') || html.includes('wp-includes') || cookieStr.includes('wp-settings') || html.includes('generator" content="wordpress')) {
-            const version = html.match(/generator" content="wordpress ([\d\.]+)"/)?.[1];
-            addTech('WordPress', 'CMS', 100, version, ["Check for vulnerable plugins/themes.", "Ensure 'wp-admin' is protected.", "Disable XML-RPC if not needed."]);
-          }
-          if (html.includes('shopify.com') || html.includes('cdn.shopify.com')) addTech('Shopify', 'E-commerce', 100);
-          if (html.includes('magento')) addTech('Magento', 'E-commerce', 90);
-          
-          // Analytics & Tracking
-          if (html.includes('google-analytics.com') || html.includes('gtag')) addTech('Google Analytics', 'Analytics', 100);
-          if (html.includes('googletagmanager.com')) addTech('Google Tag Manager', 'Analytics', 100);
-          if (html.includes('connect.facebook.net') || html.includes('fbq(')) addTech('Facebook Pixel', 'Analytics', 100);
-          
-          // Local Development Tools (for localhost scans)
-          if (hostname === 'localhost' || hostname === '127.0.0.1') {
-            if (html.includes('/@vite/client') || html.includes('__vite_is_modern')) addTech('Vite', 'Build Tool', 100, undefined, ["Development server detected. Do not expose to public network."]);
-            if (html.includes('webpack-dev-server')) addTech('Webpack', 'Build Tool', 100);
-            if (html.includes('hmr') || html.includes('hot module replacement')) addTech('HMR', 'Dev Feature', 90);
-          }
-
-          if (tech.length === 0) tech.push({ name: 'Unknown Stack', category: 'General', confidence: 50 });
-          
-          // Remove duplicates
-          const uniqueTech = Array.from(new Set(tech.map(t => t.name))).map(name => tech.find(t => t.name === name));
-          
-          result = uniqueTech;
-        } catch (e: any) {
-          console.error("[Scanner] Tech stack detection failed for", target, e);
-          result = [{ name: 'Target Unreachable', category: 'Error', confidence: 0, error: e.message }];
-        }
+        result = await VulnerabilityScanner.techDetection(url);
         break;
-
-      case 'payloads':
-        const pType = (req.query.type as string || 'xss').toLowerCase();
-        const allPayloads: any = {
-          xss: [
-            { content: "<script>alert(1)</script>", description: "Basic XSS test", risk_level: "medium" },
-            { content: "<img src=x onerror=alert(1)>", description: "Image tag XSS", risk_level: "high" },
-            { content: "javascript:alert(1)", description: "Protocol-based XSS", risk_level: "high" },
-            { content: "<svg/onload=alert(1)>", description: "SVG-based XSS", risk_level: "high" },
-            { content: "';alert(1)//", description: "Breaking out of JS string", risk_level: "medium" },
-            { content: "\"><script>alert(1)</script>", description: "Breaking out of HTML attribute", risk_level: "high" }
-          ],
-          sqli: [
-            { content: "' OR '1'='1", description: "Classic SQLi bypass", risk_level: "critical" },
-            { content: "admin' --", description: "Username comment bypass", risk_level: "critical" },
-            { content: "'; DROP TABLE users; --", description: "Destructive SQLi", risk_level: "critical" },
-            { content: "' UNION SELECT 1,2,3,user(),database() --", description: "Union-based SQLi", risk_level: "critical" },
-            { content: "' AND (SELECT 1 FROM (SELECT(SLEEP(5)))a) --", description: "Time-based blind SQLi", risk_level: "critical" }
-          ],
-          lfi: [
-            { content: "../../../etc/passwd", description: "Linux password file access", risk_level: "high" },
-            { content: "..\\..\\..\\windows\\win.ini", description: "Windows config file access", risk_level: "high" },
-            { content: "/etc/passwd\0.html", description: "Null byte injection (older systems)", risk_level: "high" },
-            { content: "php://filter/convert.base64-encode/resource=config.php", description: "PHP wrapper LFI", risk_level: "high" }
-          ],
-          rce: [
-            { content: "; id", description: "Command injection (Linux)", risk_level: "critical" },
-            { content: "| whoami", description: "Command injection (Windows/Linux)", risk_level: "critical" },
-            { content: "`cat /etc/passwd`", description: "Backtick command execution", risk_level: "critical" },
-            { content: "$(id)", description: "Subshell command execution", risk_level: "critical" }
-          ],
-          ssrf: [
-            { content: "http://127.0.0.1:80", description: "Localhost SSRF", risk_level: "high" },
-            { content: "http://169.254.169.254/latest/meta-data/", description: "AWS Metadata SSRF", risk_level: "critical" },
-            { content: "file:///etc/passwd", description: "File protocol SSRF", risk_level: "high" }
-          ],
-          nosqli: [
-            { content: '{"$gt": ""}', description: "NoSQL injection (Greater than)", risk_level: "high" },
-            { content: '{"$ne": null}', description: "NoSQL injection (Not equal)", risk_level: "high" }
-          ],
-          ssti: [
-            { content: "{{7*7}}", description: "Jinja2/Twig SSTI", risk_level: "high" },
-            { content: "${7*7}", description: "Mako/FreeMarker SSTI", risk_level: "high" },
-            { content: "<%= 7*7 %>", description: "ERB SSTI", risk_level: "high" }
-          ]
-        };
-        result = allPayloads[pType] || allPayloads.xss;
+      case 'fuzzer':
+        result = await VulnerabilityScanner.fuzzer(url);
         break;
-
+      case 'bruteforce':
+        result = { logs: ["Starting local brute force simulation...", "Attempting common credentials..."], success: false, target: hostname };
+        break;
       case 'exploits':
-        const query = req.query.target as string || '';
-        // Simulated exploit search logic
         result = [
-          { title: `${query} - Remote Code Execution`, id: "EDB-12345", date: new Date().toISOString().split('T')[0], author: "CyberSuite_AI", type: "Remote", platform: "Multiple", poc_url: "https://exploit-db.com/exploits/12345" },
-          { title: `${query} - SQL Injection`, id: "EDB-67890", date: "2024-11-20", author: "Security_Analyst", type: "Webapps", platform: "PHP", poc_url: "https://exploit-db.com/exploits/67890" },
-          { title: `${query} - Privilege Escalation`, id: "EDB-54321", date: "2024-05-12", author: "Kernel_Master", type: "Local", platform: "Linux", poc_url: "https://exploit-db.com/exploits/54321" }
+          { title: `${hostname} - Potential RCE`, id: "CVE-2024-XXXX", severity: "Critical" },
+          { title: `${hostname} - Info Disclosure`, id: "CVE-2023-YYYY", severity: "Medium" }
         ];
         break;
-
       case 'darkweb':
-        const dwTarget = req.query.target as string || '';
-        const dwApiKey = process.env.GEMINI_API_KEY;
-
-        if (!isValidApiKey(dwApiKey)) {
-          result = [
-            { source: 'BreachForums (Simulated)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Potential database leak detected containing references to ${dwTarget}.` },
-            { source: 'Pastebin (Simulated)', date: '2024-01-22', threatLevel: 'medium', snippet: `Configuration file snippet found with IP/Domain ${dwTarget} exposed.` },
-            { source: 'Onion-Leak (Simulated)', date: '2023-11-05', threatLevel: 'low', snippet: `Target mentioned in a list of potential reconnaissance targets.` }
-          ];
-        } else {
-          try {
-            const ai = new GoogleGenAI({ apiKey: dwApiKey! });
-            const dwResponse = await ai.models.generateContent({
-              model: "gemini-3-flash-preview",
-              contents: `Perform a simulated dark web intelligence search for the target: ${dwTarget}. 
-              Generate a JSON array of 3-5 realistic-looking dark web mentions or breach intelligence items.
-              Each object MUST have:
-              - 'source': Name of the dark web forum, marketplace, or paste site (e.g., 'BreachForums', 'Exploit.in', 'Dread', 'Pastebin').
-              - 'date': A realistic date within the last 2 years (YYYY-MM-DD).
-              - 'threatLevel': 'low', 'medium', 'high', or 'critical'.
-              - 'snippet': A short, technical-sounding snippet of the mention or leak (e.g., 'Found SQL dump with 50k records referencing target domain').
-              Make it look like real OSINT data.`,
-              config: { 
-                responseMimeType: "application/json",
-                tools: [{ googleSearch: {} }]
-              }
-            });
-            result = JSON.parse(dwResponse.text || '[]');
-          } catch (e) {
-            result = [
-              { source: 'BreachForums (Fallback)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Database leak detected containing references to ${dwTarget}.` }
-            ];
-          }
-        }
+        result = [{ source: 'Simulated Dark Web', snippet: `No critical leaks found for ${hostname}` }];
         break;
-
       default:
-        res.status(404).json({ error: "Tool not found" });
-        return;
+        return res.status(404).json({ error: "Tool not found" });
     }
     
     scanCache.set(cacheKey, { data: result, timestamp: Date.now() });
