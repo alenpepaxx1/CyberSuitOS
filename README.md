@@ -6,78 +6,75 @@ This application is integrated with Google Gemini AI. Some advanced tools and mo
 <img width="1920" height="2577" alt="Cyber" src="https://i.ibb.co/xSfwgG0M/screencapture-localhost-3000-2026-04-04-15-35-55.png" />
 </div>
 
-# CyberSuite OS 🛡️
+# CyberSuite: Advanced Vulnerability Scanner & Threat Intelligence Platform
 
-**CyberSuite OS** is a sophisticated, production-grade cybersecurity operations platform and educational suite. It provides a comprehensive set of tools for ethical hacking, vulnerability research, and security training, all wrapped in a high-performance, immersive "OS-style" interface.
+CyberSuite is a production-grade, full-stack cybersecurity toolkit designed for security researchers, penetration testers, and system administrators. It combines a powerful web-based interface with a robust Node.js backend to provide real-time reconnaissance, vulnerability assessment, and global threat intelligence.
 
-# For advanced analysis with artificial intelligence you must have a gemini api key.
+## 🛡️ Core Features
 
-## 🚀 Key Features
+### 1. Advanced Vulnerability Scanner
+A modular scanning engine capable of performing deep reconnaissance on any target domain or IP address.
+- **Subdomain Enumeration**: Combines passive discovery (crt.sh, HackerTarget) with high-speed DNS brute-forcing.
+- **Port Scanning**: Multi-threaded TCP port scanner targeting 25+ common services with service identification.
+- **DNS Reconnaissance**: Detailed resolution of A, MX, TXT, NS, SOA, and CNAME records.
+- **SSL/TLS Inspection**: Deep analysis of certificate chains, validity, cipher strength, and expiry tracking.
+- **Technology Stack Detection**: Signature-based identification of 40+ web technologies (Servers, CMS, Frameworks).
+- **Security Header Analysis**: Evaluates CSP, HSTS, X-Frame-Options, and other critical security headers.
+- **Advanced Fuzzer**: Intelligent payload injection (SQLi, XSS, LFI, SSRF) with response body analysis for vulnerability confirmation.
 
-### 📊 Security Operations Center (SOC)
-- **Real-time SIEM Dashboard:** Monitor live threat feeds, attack trends, and system integrity pulses.
-- **Neural Threat Topology:** Interactive D3.js visualization of global network nodes and active incursions.
-- **Vulnerability Scanner:** Automated reconnaissance with `crt.sh` integration and AI-generated security reports.
+### 2. Google Dork Explorer
+An extensive database of 150+ curated Google Dorks categorized for targeted information gathering:
+- Sensitive Files & Credentials
+- Database Management Interfaces
+- Network & VPN Portals
+- Cloud Infrastructure Leaks
+- IoT & Device Management
 
-### 🧪 Offensive Security Labs
-- **Payload Lab:** Develop and obfuscate exploits with a technical generation engine.
-- **Phishing Simulator:** AI-driven social engineering campaigns across multiple vectors (Email, SMS, Voice, QR).
-- **Dork Explorer:** Advanced Google Dorking engine with AI-powered custom query generation.
-- **Password Lab:** Entropy analysis, brute-force simulation, and k-Anonymity breach checks.
+### 3. Real-Time Threat Intelligence
+- **AI-Powered Analysis**: Integrated with **Google Gemini AI** for deep threat analysis and news aggregation.
+- **Global Attack Map**: 3D visualization of real-time cyber attack trends and state-sponsored activities.
+- **Live RSS Feed**: Aggregated security advisories from CISA, The Hacker News, and major security vendors.
+- **SIEM Dashboard**: Real-time monitoring of system integrity, CPU/RAM usage, and simulated network logs.
 
-### 🔐 Cryptography & Forensics
-- **Crypto Engine:** Multi-algorithm suite supporting AES, RSA, and various hashing functions.
-- **Stego Analysis:** Heuristic detection and extraction of hidden data in image files.
-- **Secure Chat:** End-to-end encrypted, anonymous communication channel.
+### 4. Network Topology & SIEM
+- **Interactive Map**: Visualize complex network infrastructures with node-level security status.
+- **Remediation Tools**: Isolate compromised nodes or apply patches directly from the HUD.
+- **Live Logs**: A high-fidelity stream of security events mapped to MITRE ATT&CK® tactics and techniques.
 
-### 🛠️ Developer & Training Tools
-- **Python Lab:** WASM-powered, in-browser Python scripting environment for security automation.
-- **Cyber Range:** Immersive training scenarios with real-time log analysis and technical objectives.
-- **AI Analyst (Alen):** A dedicated neural core providing technical insights and security assessments.
+## 🚀 Standalone Python Scanner
+CyberSuite includes a dedicated, standalone Python script (`scanner.py`) that mirrors the web scanner's functionality.
+- **Portable**: Run advanced scans from your local terminal.
+- **Multi-threaded**: Optimized for speed using `ThreadPoolExecutor`.
+- **Zero-Dependency (Core)**: Works out-of-the-box with standard Python libraries (requires `requests`, `dnspython`, and `python-whois`).
 
-## 🛠️ Technical Stack
+## 🛠️ Tech Stack
 
-- **Frontend:** React 18+, Vite, TypeScript
-- **Styling:** Tailwind CSS (Utility-first, responsive design)
-- **Animations:** Framer Motion (`motion/react`)
-- **Visualizations:** D3.js, Recharts
-- **Backend:** Node.js, Express
-- **Database & Auth:** Firebase (Firestore, Authentication)
-- **AI Integration:** Google Gemini AI (@google/genai)
-- **Icons:** Lucide React
+- **Frontend**: React 19, Vite, Tailwind CSS 4, Framer Motion, Recharts, Lucide React.
+- **Backend**: Node.js, Express.
+- **AI Engine**: Google Gemini API (`@google/genai`).
+- **Data Sources**: crt.sh, HackerTarget API, IANA RDAP, CVE Circle API.
 
-## ⚙️ Installation & Setup
+## 📋 Prerequisites & Setup
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/alenpepaxx1/CyberSuitOS.git
-   cd cybersuite-os
-   ```
+### Environment Variables
+To unlock full AI capabilities, create a `.env` file in the root directory:
+```env
+GEMINI_API_KEY=your_api_key_here
+```
+*Note: The scanner will function in "Local Mode" using heuristic analysis if no API key is provided.*
 
-2. **Install dependencies:**
+### Installation
+1. Install dependencies:
    ```bash
    npm install
    ```
-
-3. **Environment Variables:**
-   Create a `.env` file in the root directory and add your credentials:
-   ```env
-   # Firebase configuration will be loaded from firebase-applet-config.json
-   ```
-
-4. **Start the development server:**
+2. Start the development server:
    ```bash
    npm run dev
    ```
 
-## 🛡️ Ethical Use Disclaimer
-
-CyberSuite OS is designed for **educational and ethical security testing purposes only**. Unauthorized access to computer systems is illegal. Users are responsible for ensuring they have explicit permission before testing any targets. The developers assume no liability for misuse of this software.
-
-## 📜 License
-
-Distributed under the Apache-2.0 License. See `LICENSE` for more information.
+## ⚠️ Disclaimer
+This tool is for **educational and ethical security testing purposes only**. Unauthorized scanning of targets without explicit permission is illegal and unethical. The developers assume no liability for misuse of this software.
 
 ---
-
-*Developed by **Alen Pepa** • CyberSuite OS v4.2.0-stable*
+*Built with ❤️ for the Security Community.*
