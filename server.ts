@@ -1776,24 +1776,50 @@ async function startServer() {
         break;
 
       case 'netmap':
+        const numNodes = Math.floor(Math.random() * 20) + 15;
+        const nodes = [
+          { id: 'target', label: hostname, type: 'target', ip: '10.0.0.5', val: 20 },
+          { id: 'gateway', label: 'Gateway', type: 'infrastructure', ip: '192.168.1.1', val: 15 },
+          { id: 'fw', label: 'Firewall', type: 'security', ip: '192.168.1.254', val: 15 },
+          { id: 'lb', label: 'Load Balancer', type: 'infrastructure', ip: '10.0.0.1', val: 15 }
+        ];
+        
+        const links = [
+          { source: 'gateway', target: 'fw' },
+          { source: 'fw', target: 'lb' },
+          { source: 'lb', target: 'target' }
+        ];
+
+        const types = ['service', 'database', 'cache', 'worker', 'storage', 'auth'];
+        
+        for (let i = 0; i < numNodes; i++) {
+          const id = `node_${i}`;
+          const type = types[Math.floor(Math.random() * types.length)];
+          nodes.push({
+            id,
+            label: `${type}-${i}`,
+            type: type,
+            ip: `10.0.${Math.floor(Math.random() * 5)}.${Math.floor(Math.random() * 255)}`,
+            val: Math.floor(Math.random() * 5) + 5
+          });
+          
+          // Connect to target or load balancer mostly
+          if (Math.random() > 0.3) {
+            links.push({ source: 'target', target: id });
+          } else if (Math.random() > 0.5) {
+            links.push({ source: 'lb', target: id });
+          } else {
+            // Connect to a random existing node
+            const randomNode = nodes[Math.floor(Math.random() * (nodes.length - 1))];
+            links.push({ source: randomNode.id, target: id });
+          }
+        }
+
         result = {
           target: hostname,
-          nodes: [
-            { id: 'target', label: hostname, type: 'target', ip: '10.0.0.5' },
-            { id: 'gateway', label: 'Gateway', type: 'infrastructure', ip: '192.168.1.1' },
-            { id: 'dns1', label: 'Primary DNS', type: 'service', ip: '8.8.8.8' },
-            { id: 'dns2', label: 'Secondary DNS', type: 'service', ip: '8.8.4.4' },
-            { id: 'fw', label: 'Firewall', type: 'security', ip: '192.168.1.254' },
-            { id: 'lb', label: 'Load Balancer', type: 'infrastructure', ip: '10.0.0.1' }
-          ],
-          links: [
-            { from: 'gateway', to: 'fw' },
-            { from: 'fw', to: 'lb' },
-            { from: 'lb', to: 'target' },
-            { from: 'target', to: 'dns1' },
-            { from: 'target', to: 'dns2' }
-          ],
-          summary: `Network topology discovery for ${hostname} complete. 6 nodes and 5 links identified.`
+          nodes,
+          links,
+          summary: `Network topology discovery for ${hostname} complete. ${nodes.length} nodes and ${links.length} connections identified.`
         };
         break;
 
