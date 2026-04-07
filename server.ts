@@ -25,17 +25,28 @@ const TECH_SIGNATURES = {
       { name: 'Nginx', pattern: /nginx/i },
       { name: 'Microsoft-IIS', pattern: /microsoft-iis/i },
       { name: 'LiteSpeed', pattern: /litespeed/i },
-      { name: 'Cloudflare', pattern: /cloudflare/i }
+      { name: 'Cloudflare', pattern: /cloudflare/i },
+      { name: 'GWS', pattern: /gws/i },
+      { name: 'Caddy', pattern: /caddy/i },
+      { name: 'Tengine', pattern: /tengine/i }
     ],
     'x-powered-by': [
       { name: 'PHP', pattern: /php/i },
       { name: 'Express', pattern: /express/i },
       { name: 'ASP.NET', pattern: /asp\.net/i },
-      { name: 'Next.js', pattern: /next\.js/i }
+      { name: 'Next.js', pattern: /next\.js/i },
+      { name: 'Phusion Passenger', pattern: /phusion passenger/i },
+      { name: 'WP-Rocket', pattern: /wp-rocket/i }
     ],
     'via': [
       { name: 'Varnish', pattern: /varnish/i },
       { name: 'Squid', pattern: /squid/i }
+    ],
+    'x-generator': [
+      { name: 'WordPress', pattern: /wordpress/i },
+      { name: 'Drupal', pattern: /drupal/i },
+      { name: 'Joomla', pattern: /joomla/i },
+      { name: 'Ghost', pattern: /ghost/i }
     ]
   },
   body: [
@@ -47,34 +58,45 @@ const TECH_SIGNATURES = {
     { name: 'Drupal', pattern: /drupal/i },
     { name: 'Joomla', pattern: /joomla/i },
     { name: 'Bootstrap', pattern: /bootstrap/i },
-    { name: 'Tailwind CSS', pattern: /tailwind/i }
+    { name: 'Tailwind CSS', pattern: /tailwind/i },
+    { name: 'Shopify', pattern: /shopify/i },
+    { name: 'Wix', pattern: /wix/i },
+    { name: 'Squarespace', pattern: /squarespace/i },
+    { name: 'Gatsby', pattern: /gatsby/i },
+    { name: 'Svelte', pattern: /svelte/i },
+    { name: 'Laravel', pattern: /laravel/i },
+    { name: 'Django', pattern: /django/i },
+    { name: 'Ruby on Rails', pattern: /rails/i }
   ]
 };
 
 class VulnerabilityScanner {
   static async dnsLookup(hostname: string) {
-    const results: any = { a: [], mx: [], txt: [], ns: [] };
+    const results: any = { a: [], mx: [], txt: [], ns: [], soa: null, cname: [] };
     try {
       const lookup = await dns.promises.lookup(hostname);
       results.a = [lookup.address];
       try { results.mx = await dns.promises.resolveMx(hostname); } catch (e) {}
       try { results.txt = await dns.promises.resolveTxt(hostname); } catch (e) {}
       try { results.ns = await dns.promises.resolveNs(hostname); } catch (e) {}
+      try { results.soa = await dns.promises.resolveSoa(hostname); } catch (e) {}
+      try { results.cname = await dns.promises.resolveCname(hostname); } catch (e) {}
     } catch (e) {
       results.error = "DNS resolution failed";
     }
     return results;
   }
 
-  static async portScan(hostname: string, ports: number[] = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5432, 8080, 8443, 27017]) {
+  static async portScan(hostname: string, ports: number[] = [21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 993, 995, 1433, 1521, 2049, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9000, 9200, 27017]) {
     const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
-    const limit = pLimit(10);
+    const limit = pLimit(15);
     const results: any[] = [];
+    const timeout = 1500;
 
     await Promise.all(ports.map(port => limit(() => {
       return new Promise((resolve) => {
         const socket = new net.Socket();
-        socket.setTimeout(2000);
+        socket.setTimeout(timeout);
         socket.on('connect', () => {
           results.push({ port, status: 'open', service: VulnerabilityScanner.getServiceName(port) });
           socket.destroy();
@@ -103,6 +125,27 @@ class VulnerabilityScanner {
     if (net.isIP(hostname) || hostname === 'localhost') return [];
     
     const searchDomain = hostname.replace(/^www\./, '');
+    const results: any[] = [];
+    const subdomains = new Set<string>();
+
+    // 1. Passive Enumeration (crt.sh)
+    try {
+      const response = await axios.get(`https://crt.sh/?q=%25.${searchDomain}&output=json`, { timeout: 10000 });
+      if (response.status === 200 && Array.isArray(response.data)) {
+        response.data.forEach((entry: any) => {
+          const name = entry.name_value;
+          if (name.includes('\n')) {
+            name.split('\n').forEach((n: string) => subdomains.add(n.trim()));
+          } else {
+            subdomains.add(name.trim());
+          }
+        });
+      }
+    } catch (e) {
+      console.warn("[Scanner] crt.sh lookup failed:", e);
+    }
+
+    // 2. Common Subdomains Brute-force
     const commonSubs = [
       'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
       'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
@@ -117,12 +160,10 @@ class VulnerabilityScanner {
       'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2',
       'dev1', 'dev2', 'dev3', 'qa', 'uat', 'prod', 'production', 'sandbox', 'preprod'
     ];
+    commonSubs.forEach(sub => subdomains.add(`${sub}.${searchDomain}`));
 
-    const results: any[] = [];
     const limit = pLimit(10);
-
-    await Promise.all(commonSubs.map(sub => limit(async () => {
-      const domain = `${sub}.${searchDomain}`;
+    await Promise.all(Array.from(subdomains).map(domain => limit(async () => {
       try {
         const lookup = await dns.promises.lookup(domain);
         if (lookup && lookup.address) {
@@ -175,24 +216,43 @@ class VulnerabilityScanner {
   static async sslInspection(url: string) {
     if (!url.startsWith('https')) return { status: 'No SSL (HTTP)' };
 
+    const hostname = url.replace('https://', '').split('/')[0].split(':')[0];
+
     return new Promise((resolve) => {
-      const req = https.get(url, { rejectUnauthorized: false }, (res) => {
+      const options = {
+        hostname: hostname,
+        port: 443,
+        method: 'GET',
+        rejectUnauthorized: false,
+        agent: false
+      };
+
+      const req = https.request(options, (res) => {
         const cert = (res.socket as any).getPeerCertificate();
         if (cert && Object.keys(cert).length > 0) {
           const validTo = new Date(cert.valid_to);
+          const validFrom = new Date(cert.valid_from);
+          const now = new Date();
+          
           resolve({
             subject: cert.subject,
             issuer: cert.issuer,
             valid_from: cert.valid_from,
             valid_to: cert.valid_to,
-            status: validTo > new Date() ? "Valid" : "Expired"
+            fingerprint: cert.fingerprint,
+            serialNumber: cert.serialNumber,
+            bits: cert.bits,
+            status: validTo > now ? (validFrom < now ? "Valid" : "Not yet valid") : "Expired",
+            daysRemaining: Math.floor((validTo.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+            isSelfSigned: cert.issuer.CN === cert.subject.CN
           });
         } else {
           resolve({ status: "No certificate found" });
         }
       });
-      req.on('error', () => resolve({ status: "SSL Handshake failed" }));
+      req.on('error', (e) => resolve({ status: "SSL Handshake failed", error: e.message }));
       req.setTimeout(5000, () => { req.destroy(); resolve({ status: "Timeout" }); });
+      req.end();
     });
   }
 
@@ -313,10 +373,30 @@ class VulnerabilityScanner {
 
   static async fuzzer(url: string) {
     const payloads = [
+      // SQL Injection
       "' OR '1'='1",
+      "' OR 1=1--",
+      "admin'--",
+      "'; DROP TABLE users; --",
+      "UNION SELECT NULL,NULL,NULL--",
+      // XSS
       "<script>alert(1)</script>",
+      "<img src=x onerror=alert(1)>",
+      "javascript:alert(1)",
+      "'\"><script>alert(1)</script>",
+      // Path Traversal
       "../../../../etc/passwd",
-      "'; DROP TABLE users; --"
+      "../../../../windows/win.ini",
+      "..\\..\\..\\..\\..\\..\\..\\..\\..\\..\\etc\\passwd",
+      // Command Injection
+      "; ls -la",
+      "| cat /etc/passwd",
+      "& dir",
+      "`id`",
+      // SSRF
+      "http://169.254.169.254/latest/meta-data/",
+      "http://localhost:80",
+      "http://127.0.0.1:22"
     ];
     
     const results: any[] = [];
@@ -332,12 +412,39 @@ class VulnerabilityScanner {
           httpsAgent: new https.Agent({ rejectUnauthorized: false })
         });
         const duration = Date.now() - start;
+        const body = String(response.data).toLowerCase();
         
+        let risk = 'low';
+        let evidence = '';
+
+        if (response.status === 500) {
+          risk = 'medium';
+          evidence = 'Internal Server Error (Potential Crash)';
+        }
+        
+        const indicators = [
+          { pattern: 'sql syntax', risk: 'high', msg: 'SQL Error' },
+          { pattern: 'mysql_fetch_array', risk: 'high', msg: 'PHP MySQL Error' },
+          { pattern: 'root:x:0:0', risk: 'critical', msg: 'LFI Success (/etc/passwd)' },
+          { pattern: '[extensions]', risk: 'critical', msg: 'LFI Success (win.ini)' },
+          { pattern: '<script>alert(1)</script>', risk: 'high', msg: 'XSS Reflected' },
+          { pattern: 'uid=', risk: 'critical', msg: 'Command Injection Success' }
+        ];
+
+        for (const ind of indicators) {
+          if (body.includes(ind.pattern)) {
+            risk = ind.risk;
+            evidence = ind.msg;
+            break;
+          }
+        }
+
         results.push({
           payload,
           status: response.status,
           time: `${duration}ms`,
-          risk: response.status === 500 ? 'high' : 'low'
+          risk,
+          evidence
         });
       } catch (e) {
         results.push({ payload, status: 'Error', time: 'N/A', risk: 'low' });
@@ -1033,288 +1140,94 @@ async function startServer() {
 
     try {
       const hostname = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
-      const isIP = net.isIP(hostname);
+      const url = target.startsWith('http') ? target : `http://${target}`;
       
-      // Parallel Reconnaissance
-      await Promise.all([
-        // 1. DNS & IP
-        (async () => {
-          if (isIP) {
-            results.dns.a = [hostname];
-            results.ip = hostname;
-          } else if (hostname === 'localhost') {
-            results.dns.a = ['127.0.0.1'];
-            results.ip = '127.0.0.1';
-          } else {
-            const resolveDNS = async (host: string) => {
-              try {
-                const lookup = await Promise.race([
-                  dns.promises.lookup(host),
-                  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-                ]) as any;
-                results.dns.a = [lookup.address];
-                results.ip = lookup.address;
-                
-                // Deep scan: perform more DNS lookups
-                if (depth === 'deep') {
-                  try { results.dns.ns = await dns.promises.resolveNs(host); } catch(e) {}
-                  try { results.dns.txt = await dns.promises.resolveTxt(host); } catch(e) {}
-                }
-                
-                const dnsTimeout = 3000;
-                try { 
-                  results.dns.mx = await Promise.race([
-                    dns.promises.resolveMx(host),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), dnsTimeout))
-                  ]);
-                } catch (e) {}
-                try { 
-                  results.dns.txt = await Promise.race([
-                    dns.promises.resolveTxt(host),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), dnsTimeout))
-                  ]);
-                } catch (e) {}
-              } catch (e) {
-                if (!results.dns.error) results.dns.error = "DNS resolution failed";
-              }
-            };
-
-            await resolveDNS(hostname);
-            
-            // Fallback to root domain if no IP found and it's a www subdomain
-            if (!results.ip && hostname.startsWith('www.')) {
-              const rootDomain = hostname.substring(4);
-              await resolveDNS(rootDomain);
-            }
-          }
-        })(),
-
-        // 2. Port Scanning
-        (async () => {
-          const portsToScan = [80, 443, 22, 21, 25, 53, 3000, 8080, 8443, 3306, 5432, 27017];
-          const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
-          const scanPort = (port: number) => {
-            return new Promise((resolve) => {
-              const socket = new net.Socket();
-              socket.setTimeout(3000);
-              socket.on('connect', () => {
-                results.ports.push({ port, status: 'open', service: getServiceName(port) });
-                socket.destroy();
-                resolve(null);
-              });
-              socket.on('timeout', () => { socket.destroy(); resolve(null); });
-              socket.on('error', () => { socket.destroy(); resolve(null); });
-              socket.connect(port, scanHost);
-            });
-          };
-          await Promise.all(portsToScan.map(scanPort));
-        })(),
-
-        // 3. HTTP & SSL
-        (async () => {
-          const protocol = target.startsWith('https') ? https : http;
-          const url = target.startsWith('http') ? target : `http://${target}`;
-          
-          await new Promise((resolve) => {
-            const req = protocol.get(url, (response) => {
-              results.headers = response.headers;
-              results.statusCode = response.statusCode;
-              
-              const server = (Array.isArray(response.headers['server']) ? response.headers['server'].join(', ') : (response.headers['server'] || '')).toLowerCase();
-              const xPoweredBy = (Array.isArray(response.headers['x-powered-by']) ? response.headers['x-powered-by'].join(', ') : (response.headers['x-powered-by'] || '')).toLowerCase();
-              if (server.includes('apache')) results.tech.push('Apache');
-              if (server.includes('nginx')) results.tech.push('Nginx');
-              if (xPoweredBy.includes('php')) results.tech.push('PHP');
-              if (xPoweredBy.includes('express')) results.tech.push('Express');
-
-              if (response.socket && (response.socket as any).getPeerCertificate) {
-                const cert = (response.socket as any).getPeerCertificate();
-                if (cert && Object.keys(cert).length > 0) {
-                  const validTo = new Date(cert.valid_to);
-                  const isValid = validTo > new Date();
-                  results.ssl = {
-                    subject: cert.subject,
-                    issuer: cert.issuer,
-                    valid_from: cert.valid_from,
-                    valid_to: cert.valid_to,
-                    fingerprint: cert.fingerprint,
-                    status: isValid ? "Valid" : "Expired/Invalid",
-                    vulnerabilities: []
-                  };
-                  if (!isValid) results.ssl.vulnerabilities.push("Certificate is expired");
-                }
-              }
-              resolve(null);
-            });
-            req.on('error', () => resolve(null));
-            req.setTimeout(5000, () => { req.destroy(); resolve(null); });
-          });
-        })(),
-
-        // 4. WHOIS Lookup
-        (async () => {
-          try {
-            const whoisResult = await performWhoisLookup(hostname);
-            results.whois = whoisResult || { status: "Data not available" };
-          } catch (e) {
-            results.whois = { status: "Lookup failed" };
-          }
-        })(),
-
-        // 5. Sensitive Files
-        (async () => {
-          const sensitiveFiles = [
-            { path: '/.git', title: 'Git Repository Exposed', severity: 'critical' },
-            { path: '/.env', title: 'Environment Variables Exposed', severity: 'critical' },
-            { path: '/robots.txt', title: 'Robots.txt Analysis', severity: 'info' },
-            { path: '/phpinfo.php', title: 'PHP Info Disclosure', severity: 'high' },
-            { path: '/.svn', title: 'SVN Repository Exposed', severity: 'high' },
-            { path: '/.htaccess', title: 'Htaccess File Exposed', severity: 'medium' }
-          ];
-
-          await Promise.all(sensitiveFiles.map(async (file) => {
-            try {
-              const protocol = target.startsWith('https') ? https : http;
-              const url = target.startsWith('http') ? `${target}${file.path}` : `http://${target}${file.path}`;
-              const response: any = await new Promise((resolve, reject) => {
-                const req = protocol.get(url, resolve);
-                req.on('error', reject);
-                req.setTimeout(2000, () => { req.destroy(); resolve({ statusCode: 408 }); });
-              });
-              if (response.statusCode === 200) {
-                results.vulnerabilities.push({
-                  title: file.title,
-                  severity: file.severity as any,
-                  category: 'Information Disclosure',
-                  description: `The file ${file.path} was found on the server, which can disclose sensitive information.`,
-                  remediation: `Restrict access to the ${file.path} file or remove it from the server.`
-                });
-                if (file.severity === 'critical') score += 30;
-                else if (file.severity === 'high') score += 15;
-                else if (file.severity === 'medium') score += 5;
-              }
-            } catch (e) {}
-          }));
-        })()
+      // Parallel Reconnaissance using improved class methods
+      const [dnsData, portData, headerData, sslData, whoisData, subdomainData, techData] = await Promise.all([
+        VulnerabilityScanner.dnsLookup(hostname),
+        VulnerabilityScanner.portScan(hostname),
+        VulnerabilityScanner.headerAnalysis(url),
+        VulnerabilityScanner.sslInspection(url),
+        VulnerabilityScanner.whoisLookup(hostname),
+        VulnerabilityScanner.subdomainEnum(hostname),
+        VulnerabilityScanner.techDetection(url)
       ]);
 
-      // 6. Vulnerability Engine (Rule-based)
-      const vulnerabilities = [...results.vulnerabilities];
+      results.dns = dnsData;
+      results.ports = portData;
+      results.headers = headerData.raw || {};
+      results.ssl = sslData;
+      results.whois = whoisData;
+      results.subdomains = subdomainData;
+      results.tech = techData;
+
+      // Vulnerability Engine (Rule-based)
+      const vulnerabilities: any[] = [];
       let score = 10;
 
-      // Header checks
-      const securityHeaders = [
-        'content-security-policy',
-        'strict-transport-security',
-        'x-frame-options',
-        'x-content-type-options',
-        'referrer-policy',
-        'permissions-policy'
-      ];
-      if (results.headers) {
-        securityHeaders.forEach(header => {
-          if (!results.headers[header]) {
-            vulnerabilities.push({
-              title: `Missing Security Header: ${header}`,
-              severity: header === 'content-security-policy' ? 'high' : 'medium',
-              category: 'Web',
-              description: `The ${header} header is missing, which can expose the application to various attacks.`,
-              remediation: `Implement the ${header} header with appropriate security policies.`
-            });
-            score += (header === 'content-security-policy' ? 10 : 5);
-          }
+      // 1. Header Vulnerabilities
+      if (headerData.missing) {
+        headerData.missing.forEach((header: string) => {
+          vulnerabilities.push({
+            title: `Missing Security Header: ${header}`,
+            severity: header === 'Content-Security-Policy' ? 'high' : 'medium',
+            category: 'Web Security',
+            description: `The ${header} header is missing, which can expose the application to various attacks like XSS or Clickjacking.`,
+            remediation: `Implement the ${header} header with a strict policy.`
+          });
+          score += (header === 'Content-Security-Policy' ? 15 : 5);
         });
       }
 
-      // Port checks
+      // 2. Port Vulnerabilities
       results.ports.forEach((p: any) => {
-        if (p.port === 21 && p.status === 'open') {
+        if ([21, 23, 3389, 3306, 5432, 27017].includes(p.port)) {
           vulnerabilities.push({
-            title: "Insecure Protocol: FTP",
-            severity: "high",
-            category: "Network",
-            description: "FTP transmits data in cleartext, including credentials.",
-            remediation: "Disable FTP and use SFTP or FTPS instead."
+            title: `Exposed Service: ${p.service} (Port ${p.port})`,
+            severity: [21, 23].includes(p.port) ? 'critical' : 'high',
+            category: 'Network Security',
+            description: `The ${p.service} service is exposed to the public internet.`,
+            remediation: `Restrict access to port ${p.port} using a firewall or VPN.`
           });
-          score += 15;
-        }
-        if (p.port === 22 && p.status === 'open') {
-          vulnerabilities.push({
-            title: "Exposed SSH Port",
-            severity: "medium",
-            category: "Network",
-            description: "SSH is exposed to the public internet, increasing brute-force risk.",
-            remediation: "Restrict SSH access to specific IP ranges or use a VPN."
-          });
-          score += 5;
-        }
-        if (p.port === 23 && p.status === 'open') {
-          vulnerabilities.push({
-            title: "Insecure Protocol: Telnet",
-            severity: "critical",
-            category: "Network",
-            description: "Telnet transmits data in cleartext, including credentials.",
-            remediation: "Disable Telnet and use SSH instead."
-          });
-          score += 25;
-        }
-        if (p.port === 3389 && p.status === 'open') {
-          vulnerabilities.push({
-            title: "Exposed RDP Port",
-            severity: "high",
-            category: "Network",
-            description: "RDP is exposed to the public internet, increasing brute-force risk.",
-            remediation: "Restrict RDP access to specific IP ranges or use a VPN."
-          });
-          score += 10;
-        }
-        if (p.port === 3306 && p.status === 'open') {
-          vulnerabilities.push({
-            title: "Exposed MySQL Port",
-            severity: "high",
-            category: "Database",
-            description: "MySQL is exposed to the public internet.",
-            remediation: "Restrict MySQL access to specific IP ranges or use a VPN."
-          });
-          score += 10;
+          score += [21, 23].includes(p.port) ? 25 : 15;
         }
       });
 
-      // SSL checks
-      if (results.ssl) {
-        const expiry = new Date(results.ssl.valid_to);
-        if (expiry < new Date()) {
-          vulnerabilities.push({
-            title: "Expired SSL Certificate",
-            severity: "critical",
-            category: "SSL/TLS",
-            description: "The SSL certificate for this domain has expired.",
-            remediation: "Renew the SSL certificate immediately."
-          });
-          score += 30;
-        } else {
-          const daysLeft = Math.floor((expiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-          if (daysLeft < 30) {
-            vulnerabilities.push({
-              title: "SSL Certificate Expiring Soon",
-              severity: "medium",
-              category: "SSL/TLS",
-              description: `The SSL certificate for this domain will expire in ${daysLeft} days.`,
-              remediation: "Renew the SSL certificate soon."
-            });
-            score += 5;
-          }
-        }
-      } else if (target.startsWith('https')) {
+      // 3. SSL Vulnerabilities
+      if (results.ssl && results.ssl.status === 'Expired') {
         vulnerabilities.push({
-          title: "SSL/TLS Handshake Failure",
-          severity: "high",
+          title: "Expired SSL Certificate",
+          severity: "critical",
           category: "SSL/TLS",
-          description: "Could not establish a secure connection to the target.",
-          remediation: "Check certificate validity and server configuration."
+          description: "The SSL certificate for this domain has expired.",
+          remediation: "Renew the SSL certificate immediately."
         });
-        score += 20;
+        score += 30;
       }
+
+      // 4. Sensitive Files (Quick check)
+      const sensitiveFiles = [
+        { path: '/.git', title: 'Git Repository Exposed', severity: 'critical' },
+        { path: '/.env', title: 'Environment Variables Exposed', severity: 'critical' },
+        { path: '/phpinfo.php', title: 'PHP Info Disclosure', severity: 'high' }
+      ];
+
+      await Promise.all(sensitiveFiles.map(async (file) => {
+        try {
+          const fileUrl = `${url.endsWith('/') ? url.slice(0, -1) : url}${file.path}`;
+          const response = await axios.get(fileUrl, { timeout: 2000, validateStatus: (s) => s === 200 });
+          if (response.status === 200) {
+            vulnerabilities.push({
+              title: file.title,
+              severity: file.severity as any,
+              category: 'Information Disclosure',
+              description: `The file ${file.path} was found on the server.`,
+              remediation: `Restrict access to ${file.path} or remove it.`
+            });
+            score += file.severity === 'critical' ? 30 : 15;
+          }
+        } catch (e) {}
+      }));
 
       results.vulnerabilities = vulnerabilities;
       results.riskScore = Math.min(100, score);
