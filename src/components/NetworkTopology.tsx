@@ -4,7 +4,7 @@ import * as d3 from 'd3';
 import { 
   Shield, Server, Laptop, Router, AlertTriangle, 
   Info, Activity, Zap, Globe, Database, Cpu, 
-  Lock, Unlock, Radio, Wifi, Search, RefreshCw,
+  Lock, Unlock, Rss, Wifi, Search, RefreshCw,
   Maximize2, Minimize2, ZoomIn, ZoomOut, X,
   Plus, Minus, Maximize
 } from 'lucide-react';
