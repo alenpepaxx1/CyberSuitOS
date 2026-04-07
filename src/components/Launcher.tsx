@@ -40,7 +40,7 @@ export default function Launcher({ isOpen, onClose, onSelect, activeTool }: Laun
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl p-12 overflow-y-auto custom-scrollbar"
+      className="fixed inset-0 z-[100] bg-cyber-bg/95 backdrop-blur-xl p-12 overflow-y-auto custom-scrollbar"
     >
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-12">
@@ -49,13 +49,13 @@ export default function Launcher({ isOpen, onClose, onSelect, activeTool }: Laun
               <Zap className="text-cyber-green w-8 h-8" />
             </div>
             <div>
-              <h1 className="text-3xl font-mono font-bold text-white tracking-tighter">TOOL<span className="text-cyber-green">LAUNCHER</span></h1>
-              <p className="text-xs font-mono text-gray-500 uppercase tracking-widest mt-1">Select an operational module to begin</p>
+              <h1 className="text-3xl font-mono font-bold text-cyber-header tracking-tighter">TOOL<span className="text-cyber-green">LAUNCHER</span></h1>
+              <p className="text-xs font-mono text-cyber-text/60 uppercase tracking-widest mt-1">Select an operational module to begin</p>
             </div>
           </div>
           <button 
             onClick={onClose}
-            className="p-4 hover:bg-white/5 rounded-full text-gray-500 hover:text-white transition-all border border-white/5"
+            className="p-4 hover:bg-white/5 rounded-full text-cyber-text/60 hover:text-cyber-header transition-all border border-white/5"
           >
             <X size={32} />
           </button>
@@ -76,14 +76,14 @@ export default function Launcher({ isOpen, onClose, onSelect, activeTool }: Laun
                 "group flex flex-col p-6 rounded-2xl border transition-all text-left relative overflow-hidden",
                 activeTool === tool.id 
                   ? "bg-cyber-green/5 border-cyber-green/30" 
-                  : "bg-white/5 border-white/10 hover:border-cyber-green/30 hover:bg-white/10"
+                  : "bg-cyber-card/5 border-cyber-border hover:border-cyber-green/30 hover:bg-cyber-card/10"
               )}
             >
               <div className={cn("p-4 rounded-xl bg-black/40 w-fit mb-6 group-hover:scale-110 transition-transform", tool.color)}>
                 <tool.icon size={32} />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 font-mono uppercase tracking-tight">{tool.name}</h3>
-              <p className="text-sm text-gray-500 leading-relaxed font-sans">{tool.desc}</p>
+              <h3 className="text-lg font-bold text-cyber-header mb-2 font-mono uppercase tracking-tight">{tool.name}</h3>
+              <p className="text-sm text-cyber-text/60 leading-relaxed font-sans">{tool.desc}</p>
               
               {activeTool === tool.id && (
                 <div className="absolute top-4 right-4 flex items-center gap-2 px-2 py-1 bg-cyber-green/20 rounded border border-cyber-green/30">
