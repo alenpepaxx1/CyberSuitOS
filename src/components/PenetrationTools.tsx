@@ -47,6 +47,9 @@ interface ToolInfo {
   kaliCategory: string;
   payloads?: string[];
   cves?: string[];
+  complexity: 'Low' | 'Medium' | 'Advanced';
+  risk: 'Low' | 'Medium' | 'High';
+  stealth: 'Low' | 'Medium' | 'High';
 }
 
 const KALI_CATEGORIES = [
@@ -74,7 +77,10 @@ const PEN_TOOLS: ToolInfo[] = [
     intelligence: 'Advanced topology mapping and service version detection. Uses NSE scripts for vulnerability discovery.',
     commands: ['nmap -sV -sC -O target.com', 'nmap -T4 -A -v target.com'],
     cves: ['CVE-2023-1234', 'CVE-2022-4567'],
-    payloads: ['-sS (TCP SYN scan)', '-sU (UDP scan)', '-p- (All ports)']
+    payloads: ['-sS (TCP SYN scan)', '-sU (UDP scan)', '-p- (All ports)'],
+    complexity: 'Advanced',
+    risk: 'Medium',
+    stealth: 'Medium'
   },
   {
     id: 'whois',
@@ -84,7 +90,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '01-info-gathering',
     description: 'Client for the whois directory service.',
     intelligence: 'Retrieves registration data for domain names and IP address blocks.',
-    commands: ['whois target.com']
+    commands: ['whois target.com'],
+    complexity: 'Low',
+    risk: 'Low',
+    stealth: 'High'
   },
   {
     id: 'dnsrecon',
@@ -94,7 +103,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '01-info-gathering',
     description: 'DNS Enumeration and Scanning Tool.',
     intelligence: 'Performs zone transfers, reverse lookups, and brute forcing of DNS records.',
-    commands: ['dnsrecon -d target.com']
+    commands: ['dnsrecon -d target.com'],
+    complexity: 'Medium',
+    risk: 'Low',
+    stealth: 'Medium'
   },
   // Vulnerability Analysis
   {
@@ -106,7 +118,10 @@ const PEN_TOOLS: ToolInfo[] = [
     description: 'Web server scanner that tests for dangerous files and outdated software.',
     intelligence: 'Scans for over 6700 potentially dangerous files/programs and checks for outdated versions of over 1250 servers.',
     commands: ['nikto -h http://target.com', 'nikto -h http://target.com -ssl'],
-    cves: ['CVE-2021-3452', 'CVE-2020-11022']
+    cves: ['CVE-2021-3452', 'CVE-2020-11022'],
+    complexity: 'Medium',
+    risk: 'Medium',
+    stealth: 'Low'
   },
   {
     id: 'sqlmap',
@@ -117,7 +132,10 @@ const PEN_TOOLS: ToolInfo[] = [
     description: 'Automatic SQL injection and database takeover tool.',
     intelligence: 'Advanced heuristic engine for blind SQLi detection. Capable of fingerprinting DBMS, fetching data, and accessing underlying file systems.',
     commands: ['sqlmap -u "http://target.com/id=1" --dbs', 'sqlmap -u "http://target.com/id=1" --os-shell'],
-    payloads: ['--level=5 --risk=3', '--tamper=space2comment', '--dump-all']
+    payloads: ['--level=5 --risk=3', '--tamper=space2comment', '--dump-all'],
+    complexity: 'Advanced',
+    risk: 'High',
+    stealth: 'Low'
   },
   // Wireless Attacks
   {
@@ -129,7 +147,10 @@ const PEN_TOOLS: ToolInfo[] = [
     description: 'Complete suite of tools to assess WiFi network security.',
     intelligence: 'Focuses on different areas of WiFi security: Monitoring, Attacking, Testing, and Cracking (WEP and WPA-PSK).',
     commands: ['airmon-ng start wlan0', 'airodump-ng wlan0mon', 'aircrack-ng -w wordlist.txt capture.cap'],
-    payloads: ['aireplay-ng -0 10 -a <BSSID> wlan0mon']
+    payloads: ['aireplay-ng -0 10 -a <BSSID> wlan0mon'],
+    complexity: 'Advanced',
+    risk: 'Medium',
+    stealth: 'Medium'
   },
   // Exploitation Tools
   {
@@ -142,7 +163,10 @@ const PEN_TOOLS: ToolInfo[] = [
     intelligence: 'Modular exploit delivery system. Integrated with database for session management and post-exploitation modules.',
     commands: ['msfconsole', 'use exploit/multi/handler', 'set PAYLOAD windows/meterpreter/reverse_tcp'],
     payloads: ['windows/x64/meterpreter/reverse_https', 'linux/x64/shell/reverse_tcp'],
-    cves: ['CVE-2017-0144 (EternalBlue)', 'CVE-2019-0708 (BlueKeep)']
+    cves: ['CVE-2017-0144 (EternalBlue)', 'CVE-2019-0708 (BlueKeep)'],
+    complexity: 'Advanced',
+    risk: 'High',
+    stealth: 'Low'
   },
   {
     id: 'beef',
@@ -153,7 +177,10 @@ const PEN_TOOLS: ToolInfo[] = [
     description: 'The Browser Exploitation Framework.',
     intelligence: 'Focuses on the web browser, allowing for client-side attack vectors.',
     commands: ['beef-xss'],
-    payloads: ['Hook Browser', 'Social Engineering Redirect']
+    payloads: ['Hook Browser', 'Social Engineering Redirect'],
+    complexity: 'Medium',
+    risk: 'High',
+    stealth: 'Medium'
   },
   // Sniffing & Spoofing
   {
@@ -164,7 +191,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '09-sniffing-spoofing',
     description: 'The world\'s foremost network protocol analyzer.',
     intelligence: 'Deep inspection of hundreds of protocols. Live capture and offline analysis with powerful display filters.',
-    commands: ['wireshark', 'tshark -i eth0 -w capture.pcap']
+    commands: ['wireshark', 'tshark -i eth0 -w capture.pcap'],
+    complexity: 'Advanced',
+    risk: 'Low',
+    stealth: 'High'
   },
   {
     id: 'bettercap',
@@ -175,7 +205,10 @@ const PEN_TOOLS: ToolInfo[] = [
     description: 'The Swiss Army knife for 802.11, BLE and Ethernet networks reconnaissance and MITM attacks.',
     intelligence: 'Modular and extensible tool for network attacks.',
     commands: ['bettercap -iface eth0'],
-    payloads: ['net.probe on', 'arp.spoof on']
+    payloads: ['net.probe on', 'arp.spoof on'],
+    complexity: 'Advanced',
+    risk: 'Medium',
+    stealth: 'Medium'
   },
   // Password Attacks
   {
@@ -186,7 +219,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '05-password-attacks',
     description: 'Fast password cracker.',
     intelligence: 'Auto-detects hash types and uses optimized assembly code for maximum performance. Supports custom rules and wordlists.',
-    commands: ['john --wordlist=pass.txt hashes.txt', 'john --format=sha512crypt hashes.txt']
+    commands: ['john --wordlist=pass.txt hashes.txt', 'john --format=sha512crypt hashes.txt'],
+    complexity: 'Medium',
+    risk: 'Low',
+    stealth: 'High'
   },
   {
     id: 'hashcat',
@@ -196,7 +232,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '05-password-attacks',
     description: 'The world\'s fastest and most advanced password recovery utility.',
     intelligence: 'GPU-accelerated cracking engine. Supports over 300 hashing algorithms and advanced attack modes like mask and hybrid.',
-    commands: ['hashcat -m 0 hashes.txt wordlist.txt', 'hashcat -a 3 -m 1000 hashes.txt ?a?a?a?a?a?a?a?a']
+    commands: ['hashcat -m 0 hashes.txt wordlist.txt', 'hashcat -a 3 -m 1000 hashes.txt ?a?a?a?a?a?a?a?a'],
+    complexity: 'Advanced',
+    risk: 'Low',
+    stealth: 'High'
   },
   {
     id: 'hydra',
@@ -206,7 +245,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '05-password-attacks',
     description: 'Parallelized login cracker.',
     intelligence: 'High-speed network login cracker. Supports over 50 protocols including SSH, FTP, HTTP, SMB, and VNC.',
-    commands: ['hydra -l admin -P pass.txt target.com ssh', 'hydra -L users.txt -P pass.txt target.com http-post-form "/login:user=^USER^&pass=^PASS^:F=Login failed"']
+    commands: ['hydra -l admin -P pass.txt target.com ssh', 'hydra -L users.txt -P pass.txt target.com http-post-form "/login:user=^USER^&pass=^PASS^:F=Login failed"'],
+    complexity: 'Medium',
+    risk: 'Medium',
+    stealth: 'Medium'
   },
   // Maintaining Access
   {
@@ -217,7 +259,10 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '10-maintaining-access',
     description: 'A collection of Microsoft PowerShell modules that can be used to aid penetration testers.',
     intelligence: 'Provides post-exploitation capabilities for Windows environments.',
-    commands: ['Import-Module PowerSploit.psm1']
+    commands: ['Import-Module PowerSploit.psm1'],
+    complexity: 'Medium',
+    risk: 'High',
+    stealth: 'Medium'
   },
   // Reverse Engineering
   {
@@ -228,9 +273,80 @@ const PEN_TOOLS: ToolInfo[] = [
     kaliCategory: '07-reverse-engineering',
     description: 'A software reverse engineering (SRE) suite of tools developed by NSA\'s Research Directorate.',
     intelligence: 'Includes a decompiler, graph view, and scripting capabilities.',
-    commands: ['ghidraRun']
+    commands: ['ghidraRun'],
+    complexity: 'Advanced',
+    risk: 'Low',
+    stealth: 'High'
   }
 ];
+
+const MAN_PAGES: Record<string, string> = {
+  nmap: 'NMAP(1) - Network exploration tool and security scanner. Usage: nmap [Scan Type...] [Options] {target specification}',
+  sqlmap: 'SQLMAP(1) - Automatic SQL injection and database takeover tool. Usage: sqlmap [options]',
+  metasploit: 'MSFCONSOLE(1) - Metasploit Framework Console. Usage: msfconsole [options]',
+  nikto: 'NIKTO(1) - Web server security scanner. Usage: nikto -h <host> [options]',
+  'aircrack-ng': 'AIRCRACK-NG(1) - 802.11 WEP and WPA-PSK keys cracking program. Usage: aircrack-ng [options] <.cap / .ivs file(s)>',
+  hydra: 'HYDRA(1) - A very fast network logon cracker. Usage: hydra [[[-l LOGIN|-L FILE] [-p PASS|-P FILE]] | [-C FILE]] [-e nsr] [-o FILE] [-t TASKS] [-M FILE [-T TASKS]] [-w TIME] [-W TIME] [-f] [-s PORT] [-x MIN:MAX:CHARSET] [-u] [-vV] [-l LOGIN] [-p PASS] [-s PORT] [service://server[:PORT][/OPT]]',
+  hashcat: 'HASHCAT(1) - Advanced password recovery utility. Usage: hashcat [options]... hash|hashfile|hcstat2 [dictionary|mask|directory]...',
+  wireshark: 'WIRESHARK(1) - Interactively dump and analyze network traffic. Usage: wireshark [options] ...',
+  bettercap: 'BETTERCAP(1) - The Swiss Army knife for network reconnaissance and MITM attacks. Usage: bettercap [options]',
+  beef: 'BEEF(1) - Browser Exploitation Framework. Usage: beef-xss [options]',
+  john: 'JOHN(1) - John the Ripper password cracker. Usage: john [options] [path to hash file]',
+  ghidra: 'GHIDRA(1) - Software reverse engineering suite. Usage: ghidraRun',
+  powersploit: 'POWERSPLOIT(1) - PowerShell Post-Exploitation Framework. Usage: Import-Module PowerSploit.psm1',
+  whois: 'WHOIS(1) - Client for the whois directory service. Usage: whois [options] name',
+  dnsrecon: 'DNSRECON(1) - DNS Enumeration and Scanning Tool. Usage: dnsrecon [options]'
+};
+
+const TOOL_STEPS: Record<string, string[]> = {
+  nmap: [
+    'Initializing Nmap 7.94...',
+    'Performing ARP ping scan...',
+    'Scanning 65535 ports (TCP SYN)...',
+    'Service detection (NSE scripts)...',
+    'OS fingerprinting via TCP/IP stack...',
+    'Aggregating results into XML report.'
+  ],
+  sqlmap: [
+    'Testing connection to target URL...',
+    'Checking for WAF/IPS/IDS protection...',
+    'Heuristic test for SQL injection...',
+    'Testing boolean-based blind injection...',
+    'Extracting database banner...',
+    'Enumerating database schemas...'
+  ],
+  metasploit: [
+    'Starting Metasploit Framework Console...',
+    'Loading modules and plugins...',
+    'Setting up reverse handler...',
+    'Generating staged payload...',
+    'Attempting exploit delivery...',
+    'Waiting for session check-in...'
+  ],
+  nikto: [
+    'Connecting to web server port...',
+    'Checking for common sensitive files...',
+    'Testing for outdated server headers...',
+    'Scanning for XSS vulnerabilities...',
+    'Verifying SSL/TLS configuration...',
+    'Compiling vulnerability report.'
+  ]
+};
+
+const VULNERABILITY_DB: Record<string, any[]> = {
+  '192.168.1.10': [
+    { title: 'CVE-2023-21036', desc: 'Aclir vulnerability in Android kernel.', sev: 'HIGH' },
+    { title: 'SSH-Weak-MAC', desc: 'Target supports weak Message Authentication Code algorithms.', sev: 'MEDIUM' }
+  ],
+  '192.168.1.13': [
+    { title: 'CVE-2017-0144', desc: 'EternalBlue SMB Remote Code Execution.', sev: 'CRITICAL' },
+    { title: 'MS17-010', desc: 'WannaCry ransomware entry point.', sev: 'CRITICAL' }
+  ],
+  'default': [
+    { title: 'CVE-2024-1234', desc: 'Remote Code Execution via buffer overflow.', sev: 'CRITICAL' },
+    { title: 'Insecure Auth', desc: 'Weak password hashing detected.', sev: 'HIGH' }
+  ]
+};
 
 interface ScanResult {
   id: string;
@@ -275,7 +391,7 @@ export default function PenetrationTools() {
     setAnalysisLogs(prev => [...prev, `${prefix} ${message}`]);
   };
 
-  const executeTool = (tool: ToolInfo, customTarget?: string) => {
+  const executeTool = (tool: ToolInfo, customTarget?: string, options: { payload?: string; flags?: string[] } = {}) => {
     const finalTarget = customTarget || target;
     if (!finalTarget) {
       addLog('Error: Target required. Use "set target <ip>" or provide target in HUD.', 'error');
@@ -285,8 +401,10 @@ export default function PenetrationTools() {
     setIsAnalyzing(true);
     setAnalysisProgress(0);
     addLog(`Initializing ${tool.name} framework...`, 'info');
+    if (options.payload) addLog(`Staging payload: ${options.payload}`, 'info');
+    if (options.flags && options.flags.length > 0) addLog(`Applying flags: ${options.flags.join(' ')}`, 'info');
     
-    const steps = [
+    const defaultSteps = [
       `Loading modules for ${tool.category}...`,
       `Resolving target: ${finalTarget}`,
       `Starting reconnaissance phase...`,
@@ -298,6 +416,8 @@ export default function PenetrationTools() {
       `Generating post-exploitation report...`,
       `Analysis complete. Results saved to workspace.`
     ];
+
+    const steps = TOOL_STEPS[tool.id] || defaultSteps;
 
     let currentStep = 0;
     const interval = setInterval(() => {
@@ -315,10 +435,7 @@ export default function PenetrationTools() {
           target: finalTarget,
           timestamp: new Date().toISOString(),
           logs: [...analysisLogs],
-          vulnerabilities: [
-            { title: 'CVE-2024-1234', desc: 'Remote Code Execution via buffer overflow.', sev: 'CRITICAL' },
-            { title: 'Insecure Auth', desc: 'Weak password hashing detected.', sev: 'HIGH' }
-          ]
+          vulnerabilities: VULNERABILITY_DB[finalTarget] || VULNERABILITY_DB['default']
         };
         setWorkspace(prev => [newResult, ...prev]);
         logToTerminal(`${tool.name} analysis complete on ${finalTarget}.`, 'success');
@@ -330,14 +447,29 @@ export default function PenetrationTools() {
     e.preventDefault();
     if (!terminalInput.trim()) return;
 
-    const cmd = terminalInput.trim().toLowerCase();
-    setCommandHistory(prev => [terminalInput, ...prev]);
+    const rawInput = terminalInput.trim();
+    setCommandHistory(prev => [rawInput, ...prev]);
     setHistoryIndex(-1);
-    addLog(terminalInput, 'cmd');
+    addLog(rawInput, 'cmd');
     setTerminalInput('');
 
-    const args = cmd.split(' ');
-    const baseCmd = args[0];
+    const parts = rawInput.split(' ');
+    const baseCmd = parts[0].toLowerCase();
+    const args = parts.slice(1);
+
+    // Advanced argument parsing
+    const options: { target?: string; payload?: string; flags: string[] } = { flags: [] };
+    for (let i = 0; i < args.length; i++) {
+      if (args[i] === '-t' || args[i] === '--target') {
+        options.target = args[i + 1];
+        i++;
+      } else if (args[i] === '-p' || args[i] === '--payload') {
+        options.payload = args[i + 1];
+        i++;
+      } else if (args[i].startsWith('-')) {
+        options.flags.push(args[i]);
+      }
+    }
 
     switch (baseCmd) {
       case 'help':
@@ -345,8 +477,12 @@ export default function PenetrationTools() {
         addLog('  help              - Show this help menu', 'output');
         addLog('  clear             - Clear terminal screen', 'output');
         addLog('  ls                - List available tools', 'output');
+        addLog('  man <tool>        - Show manual for a tool', 'output');
         addLog('  set target <val>  - Set global target', 'output');
         addLog('  run <tool_id>     - Execute a specific tool', 'output');
+        addLog('  ps                - List active processes', 'output');
+        addLog('  cat <file>        - View file content (simulated)', 'output');
+        addLog('  ifconfig          - Show network interface info', 'output');
         addLog('  whoami            - Display current user info', 'output');
         addLog('  exit              - Reset terminal session', 'output');
         break;
@@ -357,22 +493,56 @@ export default function PenetrationTools() {
         addLog('Available Penetration Tools:', 'output');
         PEN_TOOLS.forEach(t => addLog(`  - ${t.id.padEnd(15)} [${t.category}]`, 'output'));
         break;
+      case 'man':
+        const manTool = args[0];
+        if (MAN_PAGES[manTool]) {
+          addLog(MAN_PAGES[manTool], 'output');
+        } else {
+          addLog(`No manual entry for ${manTool}`, 'error');
+        }
+        break;
       case 'set':
-        if (args[1] === 'target' && args[2]) {
-          setTarget(args[2]);
-          addLog(`Target set to: ${args[2]}`, 'success');
+        if (args[0] === 'target' && args[1]) {
+          setTarget(args[1]);
+          addLog(`Target set to: ${args[1]}`, 'success');
         } else {
           addLog('Usage: set target <ip_or_domain>', 'error');
         }
         break;
       case 'run':
-        const toolId = args[1];
+        const toolId = args[0];
         const tool = PEN_TOOLS.find(t => t.id === toolId);
         if (tool) {
-          executeTool(tool);
+          executeTool(tool, options.target, { payload: options.payload, flags: options.flags });
         } else {
           addLog(`Tool not found: ${toolId}. Use "ls" to see available tools.`, 'error');
         }
+        break;
+      case 'ps':
+        addLog('PID   TTY      TIME     CMD', 'output');
+        addLog('1     tty1     00:00:01 systemd', 'output');
+        addLog('42    tty1     00:00:05 kali-suite-advanced', 'output');
+        if (isAnalyzing) {
+          addLog(`1337  tty1     00:00:02 ${selectedTool.id} (ANALYZING)`, 'output');
+        }
+        break;
+      case 'cat':
+        if (args[0] === '/etc/passwd') {
+          addLog('root:x:0:0:root:/root:/bin/bash', 'output');
+          addLog('kali:x:1000:1000:kali,,,:/home/kali:/bin/bash', 'output');
+        } else if (args[0] === 'version.txt') {
+          addLog('KALI-SUITE ADVANCED v2.0.4-stable', 'output');
+        } else {
+          addLog(`cat: ${args[0]}: No such file or directory`, 'error');
+        }
+        break;
+      case 'ifconfig':
+      case 'ip':
+        addLog('eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500', 'output');
+        addLog('        inet 10.0.2.15  netmask 255.255.255.0  broadcast 10.0.2.255', 'output');
+        addLog('        ether 08:00:27:8d:c0:4d  txqueuelen 1000  (Ethernet)', 'output');
+        addLog('lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536', 'output');
+        addLog('        inet 127.0.0.1  netmask 255.0.0.0', 'output');
         break;
       case 'whoami':
         addLog('root@kali-suite-advanced', 'output');
@@ -384,7 +554,7 @@ export default function PenetrationTools() {
         // Check if it's a tool ID directly
         const directTool = PEN_TOOLS.find(t => t.id === baseCmd);
         if (directTool) {
-          executeTool(directTool);
+          executeTool(directTool, options.target, { payload: options.payload, flags: options.flags });
         } else {
           addLog(`Command not found: ${baseCmd}. Type "help" for a list of commands.`, 'error');
         }
@@ -392,7 +562,21 @@ export default function PenetrationTools() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowUp') {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const input = terminalInput.trim().toLowerCase();
+      if (!input) return;
+
+      const matches = PEN_TOOLS.filter(t => t.id.startsWith(input)).map(t => t.id);
+      const cmdMatches = ['help', 'clear', 'ls', 'man', 'set', 'run', 'ps', 'cat', 'ifconfig', 'whoami', 'exit'].filter(c => c.startsWith(input));
+      
+      const allMatches = [...matches, ...cmdMatches];
+      if (allMatches.length === 1) {
+        setTerminalInput(allMatches[0]);
+      } else if (allMatches.length > 1) {
+        addLog(allMatches.join('  '), 'output');
+      }
+    } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       if (historyIndex < commandHistory.length - 1) {
         const newIndex = historyIndex + 1;
@@ -561,15 +745,27 @@ export default function PenetrationTools() {
                 <div className="grid grid-cols-3 gap-4">
                   <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                     <div className="text-[10px] text-gray-500 uppercase mb-1">Complexity</div>
-                    <div className="text-sm font-bold text-cyber-header">Advanced</div>
+                    <div className="text-sm font-bold text-cyber-header">{selectedTool.complexity}</div>
                   </div>
                   <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                     <div className="text-[10px] text-gray-500 uppercase mb-1">Risk Level</div>
-                    <div className="text-sm font-bold text-red-500">High</div>
+                    <div className={cn(
+                      "text-sm font-bold",
+                      selectedTool.risk === 'High' ? "text-red-500" : 
+                      selectedTool.risk === 'Medium' ? "text-amber-500" : "text-emerald-500"
+                    )}>
+                      {selectedTool.risk}
+                    </div>
                   </div>
                   <div className="p-3 bg-white/5 rounded-xl border border-white/5">
                     <div className="text-[10px] text-gray-500 uppercase mb-1">Stealth</div>
-                    <div className="text-sm font-bold text-amber-500">Medium</div>
+                    <div className={cn(
+                      "text-sm font-bold",
+                      selectedTool.stealth === 'High' ? "text-emerald-500" : 
+                      selectedTool.stealth === 'Medium' ? "text-amber-500" : "text-red-500"
+                    )}>
+                      {selectedTool.stealth}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -662,6 +858,11 @@ export default function PenetrationTools() {
                         className="absolute"
                         style={{
                           transform: `rotate(${angle}deg) translate(80px) rotate(-${angle}deg)`
+                        }}
+                        onClick={() => {
+                          const newTarget = `192.168.1.${10 + i}`;
+                          setTarget(newTarget);
+                          addLog(`Target updated via topology: ${newTarget}`, 'info');
                         }}
                       >
                         <div className={cn(
@@ -840,6 +1041,28 @@ export default function PenetrationTools() {
                     </form>
                   </div>
                 )}
+              </div>
+
+              {/* Terminal Status Bar */}
+              <div className="bg-white/5 px-4 py-1.5 flex items-center justify-between border-t border-white/10 text-[9px] font-mono text-gray-500">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <div className={cn("w-1.5 h-1.5 rounded-full", isAnalyzing ? "bg-amber-500 animate-pulse" : "bg-emerald-500")} />
+                    STATUS: {isAnalyzing ? 'BUSY' : 'READY'}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Globe size={10} />
+                    TARGET: {target || 'NONE'}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Terminal size={10} />
+                    TOOL: {selectedTool.id.toUpperCase()}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>UTF-8</span>
+                  <span>LINUX-X64</span>
+                </div>
               </div>
 
               {isAnalyzing && (
